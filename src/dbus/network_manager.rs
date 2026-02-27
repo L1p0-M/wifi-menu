@@ -44,6 +44,15 @@ pub struct SavedNetwork {
     pub is_active: bool,
 }
 
+#[derive(Debug, Clone)]
+pub struct VpnConnection {
+    pub name: String,
+    pub uuid: String,
+    pub path: String,
+    pub connection_type: String,
+    pub is_active: bool,
+}
+
 #[derive(Debug, Clone, Default)]
 pub struct NetworkDetails {
     pub ssid: String,
@@ -744,5 +753,187 @@ impl NetworkManager {
         }
         
         Ok(details)
+    }
+    pub async fn get_saved_vpns(&self) -> zbus::Result<Vec<VpnConnection>> {
+        let connections: Vec<zbus::zvariant::OwnedObjectPath> = self.conn
+            .call_method(
+                Some("org.freedesktop.NetworkManager"),
+                "/org/freedesktop/NetworkManager/Settings",
+                Some("org.freedesktop.NetworkManager.Settings"),
+                "ListConnections",
+                &(),
+            )
+            .await?
+            .body()
+            .deserialize()?;
+
+        let mut vpn_list = Vec::new();
+        let active_paths = self.get_active_connection_paths().await;
+
+        for conn_path in connections {
+            if let Ok(settings) = self.get_connection_settings(&conn_path).await {
+                if let Some(connection_map) = settings.get("connection") {
+                    let conn_type = connection_map.get("type")
+                        .and_then(|v| v.downcast_ref::<String>().ok())
+                        .unwrap_or_default();
+
+                    // Szűrünk a vpn és wireguard típusokra
+                    if conn_type == "vpn" || conn_type == "wireguard" {
+                        println!("Found VPN connection: {}", conn_path);
+                        let id = connection_map.get("id")
+                            .and_then(|v| v.downcast_ref::<String>().ok())
+                            .unwrap_or_default();
+                        
+                        let uuid = connection_map.get("uuid")
+                            .and_then(|v| v.downcast_ref::<String>().ok())
+                            .unwrap_or_default();
+
+
+                        let is_active = active_paths.contains(&conn_path.to_string());
+                        println!("Is active: {}", is_active);
+
+                        vpn_list.push(VpnConnection {
+                            name: id,
+                            uuid,
+                            path: conn_path.to_string(),
+                            connection_type: conn_type,
+                            is_active,
+                        });
+                    }
+                }
+            }
+        }
+        Ok(vpn_list)
+    }
+
+    pub async fn get_active_vpns(&self) -> zbus::Result<Vec<VpnConnection>> {
+        let active_paths = self.get_active_connection_paths().await;
+        let mut active_vpns = Vec::new();
+
+        for path_str in active_paths {
+            let path: zbus::zvariant::ObjectPath = path_str.as_str().try_into()
+                .map_err(|e: zbus::zvariant::Error| zbus::Error::Variant(e))?;
+
+            let conn_type: String = self.conn
+                .call_method(
+                    Some("org.freedesktop.NetworkManager"),
+                    &path,
+                    Some("org.freedesktop.DBus.Properties"),
+                    "Get",
+                    &("org.freedesktop.NetworkManager.Connection.Active", "Type"),
+                )
+                .await?
+                .body()
+                .deserialize::<zbus::zvariant::OwnedValue>()?
+                .try_into()
+                .unwrap_or_default();
+
+            if conn_type == "vpn" || conn_type == "wireguard" {
+                let id: String = self.conn
+                    .call_method(
+                        Some("org.freedesktop.NetworkManager"),
+                        &path,
+                        Some("org.freedesktop.DBus.Properties"),
+                        "Get",
+                        &("org.freedesktop.NetworkManager.Connection.Active", "Id"),
+                    )
+                    .await?
+                    .body()
+                    .deserialize::<zbus::zvariant::OwnedValue>()?
+                    .try_into()
+                    .unwrap_or_default();
+
+                let uuid: String = self.conn
+                    .call_method(
+                        Some("org.freedesktop.NetworkManager"),
+                        &path,
+                        Some("org.freedesktop.DBus.Properties"),
+                        "Get",
+                        &("org.freedesktop.NetworkManager.Connection.Active", "Uuid"),
+                    )
+                    .await?
+                    .body()
+                    .deserialize::<zbus::zvariant::OwnedValue>()?
+                    .try_into()
+                    .unwrap_or_default();
+
+                active_vpns.push(VpnConnection {
+                    name: id,
+                    uuid,
+                    path: path_str,
+                    connection_type: conn_type,
+                    is_active: true,
+                });
+            }
+        }
+        Ok(active_vpns)
+    }
+    pub async fn connectvpn(&self, _id: &str, path: &str) -> zbus::Result<()> {
+        let settings_path = ObjectPath::try_from(path)
+            .map_err(|e| zbus::Error::Variant(e.into()))?;
+
+        self.conn
+            .call_method(
+                Some("org.freedesktop.NetworkManager"),
+                "/org/freedesktop/NetworkManager",
+                Some("org.freedesktop.NetworkManager"),
+                "ActivateConnection",
+                &(
+                    settings_path,
+                    ObjectPath::try_from("/")?,
+                    ObjectPath::try_from("/")?,
+                ),
+            )
+            .await?;
+            
+        Ok(())
+    }
+    
+    pub async fn disconnectvpn(&self) -> zbus::Result<()> {
+        let reply: zbus::zvariant::OwnedValue = self.conn
+            .call_method(
+                Some("org.freedesktop.NetworkManager"),
+                "/org/freedesktop/NetworkManager",
+                Some("org.freedesktop.DBus.Properties"),
+                "Get",
+                &("org.freedesktop.NetworkManager", "ActiveConnections"),
+            )
+            .await?
+            .body()
+            .deserialize()?;
+        
+        let active_paths: Vec<zbus::zvariant::OwnedObjectPath> = reply.try_into()
+            .map_err(|e| zbus::Error::Variant(e))?;
+        
+        for path in active_paths {
+            let conn_type: String = self.conn
+                .call_method(
+                    Some("org.freedesktop.NetworkManager"),
+                    &path,
+                    Some("org.freedesktop.DBus.Properties"),
+                    "Get",
+                    &("org.freedesktop.NetworkManager.Connection.Active", "Type"),
+                )
+                .await?
+                .body()
+                .deserialize::<zbus::zvariant::OwnedValue>()?
+                .try_into()
+                .unwrap_or_default();
+
+            if conn_type == "vpn" || conn_type == "wireguard" {
+                println!("VPN lekapcsolása: {:?}", path);
+                self.conn
+                    .call_method(
+                        Some("org.freedesktop.NetworkManager"),
+                        "/org/freedesktop/NetworkManager",
+                        Some("org.freedesktop.NetworkManager"),
+                        "DeactivateConnection",
+                        &path,
+                    )
+                    .await?;
+            }
+        }
+        
+        Ok(())
     }
 }

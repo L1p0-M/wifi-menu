@@ -4,6 +4,7 @@ pub mod network_list;
 pub mod device_list;
 pub mod password_dialog;
 pub mod saved_networks_list;
+pub mod vpn_list;
 
 pub use window::OrbitWindow;
 pub use header::Header;
@@ -11,3 +12,4 @@ pub use network_list::NetworkList;
 pub use device_list::{DeviceList, DeviceAction};
 pub use password_dialog::PasswordDialog;
 pub use saved_networks_list::SavedNetworksList;
+pub use vpn_list::VpnList;
