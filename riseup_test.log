@@ -1,0 +1,13 @@
+{"level":"debug","port":8080,"time":"2026-03-16T03:41:03-04:00","message":"Starting WebAPI"}
+[90m2026-03-16T03:41:03-04:00[0m [32mINF[0m [1mEnabling logging[0m [36mhint=[0m"you can change the log level with env LOG_LEVEL=INFO|DEBUG|TRACE" [36mlogFile=[0m/home/amadeus/.config/leap/systray.log
+[90m2026-03-16T03:41:03-04:00[0m [32mINF[0m [1mNot autostarting OpenVPN[0m
+[90m2026-03-16T03:41:03-04:00[0m [32mINF[0m [1mChecking for updates[0m [36murl=[0mhttps://downloads.leap.se/RiseupVPN/linux/lastver
+[90m2026-03-16T03:41:03-04:00[0m [32mINF[0m [1mSucessfully checked if there is an update[0m [36mupdateAvailable=[0mfalse
+[90m2026-03-16T03:41:03-04:00[0m [32mINF[0m [1mStopping firewall[0m
+[90m2026-03-16T03:41:07-04:00[0m [32mINF[0m [1mUsing transport openvpn[0m
+[90m2026-03-16T03:41:07-04:00[0m [32mINF[0m [1mFetching gateways...[0m
+[90m2026-03-16T03:41:07-04:00[0m [32mINF[0m [1mSetting transport[0m [36mtransport=[0mopenvpn
+[90m2026-03-16T03:41:07-04:00[0m [32mINF[0m [1mEnabled UDP[0m
+[90m2026-03-16T03:41:07-04:00[0m [32mINF[0m [1mGot sorted gateways: [vpn12-nyc.riseup.net vpn10-mtl.riseup.net vpn18-mtl.riseup.net vpn22-mia.riseup.net vpn23-mia.riseup.net vpn15-sea.riseup.net vpn16-sea.riseup.net vpn01-sea.riseup.net vpn11-par.riseup.net vpn20-par.riseup.net vpn03-par.riseup.net vpn21-par.riseup.net vpn07-par.riseup.net vpn08-par.riseup.net vpn05-par.riseup.net vpn02-par.riseup.net vpn14-par.riseup.net vpn04-ams.riseup.net vpn13-ams.riseup.net vpn06-ams.riseup.net vpn19-ams.riseup.net][0m
+[90m2026-03-16T03:41:42-04:00[0m [32mINF[0m [1mClose: cleanup and vpn shutdown...[0m
+[90m2026-03-16T03:41:42-04:00[0m [32mINF[0m [1mStopping firewall[0m

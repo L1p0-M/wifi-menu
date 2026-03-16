@@ -874,7 +874,12 @@ impl NetworkManager {
             let service = &path[9..];
             match service {
                 "riseup" => {
-                    let _ = std::process::Command::new("riseup-vpn").arg("--start-vpn").arg("on").spawn();
+                    // Use -n to avoid the splash/tray icon and -w to enable web-api
+                    // No sudo here as we set the SUID bit on the helper
+                    let _ = std::process::Command::new("sh")
+                        .arg("-c")
+                        .arg("nohup riseup-vpn -n -w --start-vpn on >/dev/null 2>&1 &")
+                        .spawn();
                 }
                 "tailscale" => {
                     let _ = std::process::Command::new("tailscale").arg("up").status();
@@ -907,7 +912,11 @@ impl NetworkManager {
             let service = &path[9..];
             match service {
                 "riseup" => {
-                    let _ = std::process::Command::new("riseup-vpn").arg("--start-vpn").arg("off").spawn();
+                    // Use pkexec for the root helper to ensure proper permission elevation via Polkit
+                    let _ = std::process::Command::new("sh")
+                        .arg("-c")
+                        .arg("pkill riseup-vpn; sleep 1; pkexec /usr/sbin/bitmask-root firewall stop")
+                        .status();
                 }
                 "tailscale" => {
                     let _ = std::process::Command::new("tailscale").arg("down").status();

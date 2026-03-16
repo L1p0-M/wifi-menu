@@ -1,0 +1,187 @@
+
+(orbit:528019): Gtk-WARNING **: 03:47:17.755: Theme parser error: gtk.css:173:3-30: No property named "-gtktoolbutton-icon-spacing"
+
+(orbit:528019): Gtk-WARNING **: 03:47:17.755: Theme parser error: gtk.css:174:3-37: No property named "-gtktextview-error-underline-color"
+
+(orbit:528019): Gtk-WARNING **: 03:47:17.755: Theme parser error: gtk.css:175:3-39: No property named "-gtkscrolledwindow-scrollbar-spacing"
+
+(orbit:528019): Gtk-WARNING **: 03:47:17.755: Theme parser error: gtk.css:176:3-34: No property named "-gtktoolitemgroup-expander-size"
+
+(orbit:528019): Gtk-WARNING **: 03:47:17.755: Theme parser error: gtk.css:177:3-31: No property named "-gtkwidget-text-handle-width"
+
+(orbit:528019): Gtk-WARNING **: 03:47:17.755: Theme parser error: gtk.css:178:3-32: No property named "-gtkwidget-text-handle-height"
+
+(orbit:528019): Gtk-WARNING **: 03:47:17.755: Theme parser error: gtk.css:179:3-28: No property named "-gtkdialog-button-spacing"
+
+(orbit:528019): Gtk-WARNING **: 03:47:17.755: Theme parser error: gtk.css:180:3-32: No property named "-gtkdialog-action-area-border"
+
+(orbit:528019): Gtk-WARNING **: 03:47:17.755: Theme parser error: gtk.css:185:3-22: No property named "-gtk-outline-radius"
+
+(orbit:528019): Gtk-WARNING **: 03:47:17.755: Theme parser error: gtk.css:311:3-19: No property named "-gtk-icon-effect"
+
+(orbit:528019): Gtk-WARNING **: 03:47:17.758: Theme parser error: gtk.css:1464:23-37: Not a valid image
+
+(orbit:528019): Gtk-WARNING **: 03:47:17.758: Theme parser error: gtk.css:1475:23-37: Not a valid image
+
+(orbit:528019): Gtk-WARNING **: 03:47:17.760: Theme parser error: gtk.css:2717:3-29: No property named "-gtkwidget-window-dragging"
+
+(orbit:528019): Gtk-WARNING **: 03:47:17.761: Theme parser error: gtk.css:3103:3-26: No property named "-gtkarrow-arrow-scaling"
+
+(orbit:528019): Gtk-WARNING **: 03:47:17.761: Theme parser error: gtk.css:3342:3-36: No property named "-gtktreeview-horizontal-separator"
+
+(orbit:528019): Gtk-WARNING **: 03:47:17.761: Theme parser error: gtk.css:3343:3-31: No property named "-gtktreeview-grid-line-width"
+
+(orbit:528019): Gtk-WARNING **: 03:47:17.761: Theme parser error: gtk.css:3344:3-33: No property named "-gtktreeview-grid-line-pattern"
+
+(orbit:528019): Gtk-WARNING **: 03:47:17.761: Theme parser error: gtk.css:3345:3-31: No property named "-gtktreeview-tree-line-width"
+
+(orbit:528019): Gtk-WARNING **: 03:47:17.761: Theme parser error: gtk.css:3346:3-33: No property named "-gtktreeview-tree-line-pattern"
+
+(orbit:528019): Gtk-WARNING **: 03:47:17.761: Theme parser error: gtk.css:3347:3-29: No property named "-gtktreeview-expander-size"
+
+(orbit:528019): Gtk-WARNING **: 03:47:17.762: Theme parser error: gtk.css:3470:3-29: No property named "-gtkwidget-window-dragging"
+
+(orbit:528019): Gtk-WARNING **: 03:47:17.762: Theme parser error: gtk.css:3956:3-37: No property named "-gtkscrollbar-has-backward-stepper"
+
+(orbit:528019): Gtk-WARNING **: 03:47:17.762: Theme parser error: gtk.css:3957:3-36: No property named "-gtkscrollbar-has-forward-stepper"
+
+(orbit:528019): Gtk-WARNING **: 03:47:17.764: Theme parser error: gtk.css:5039:21-35: Not a valid image
+
+(orbit:528019): Gtk-WARNING **: 03:47:17.764: Theme parser error: gtk.css:5056:21-35: Not a valid image
+
+(orbit:528019): Gtk-WARNING **: 03:47:17.764: Theme parser error: gtk.css:5073:21-35: Not a valid image
+
+(orbit:528019): Gtk-WARNING **: 03:47:17.764: Theme parser error: gtk.css:5090:21-35: Not a valid image
+
+(orbit:528019): Gtk-WARNING **: 03:47:17.768: Theme parser error: gtk.css:8299:3-26: No property named "-pnldockbin-handle-size"
+
+(orbit:528019): Gtk-WARNING **: 03:47:17.768: Theme parser error: gtk.css:8406:3-26: No property named "-pnldockbin-handle-size"
+
+(orbit:528019): Gtk-WARNING **: 03:47:17.768: Theme parser error: gtk.css:8609:3-28: No property named "-gdmainiconview-icon-size"
+
+(orbit:528019): Gtk-WARNING **: 03:47:17.769: Theme parser error: gtk.css:9846:3-27: No property named "-unitydecoration-extents"
+
+(orbit:528019): Gtk-WARNING **: 03:47:17.769: Theme parser error: gtk.css:9847:3-33: No property named "-unitydecoration-input-extents"
+
+(orbit:528019): Gtk-WARNING **: 03:47:17.770: Theme parser error: gtk.css:9848:3-35: No property named "-unitydecoration-shadow-offset-x"
+
+(orbit:528019): Gtk-WARNING **: 03:47:17.770: Theme parser error: gtk.css:9849:3-35: No property named "-unitydecoration-shadow-offset-y"
+
+(orbit:528019): Gtk-WARNING **: 03:47:17.770: Theme parser error: gtk.css:9850:3-39: No property named "-unitydecoration-active-shadow-color"
+
+(orbit:528019): Gtk-WARNING **: 03:47:17.770: Theme parser error: gtk.css:9851:3-40: No property named "-unitydecoration-active-shadow-radius"
+
+(orbit:528019): Gtk-WARNING **: 03:47:17.770: Theme parser error: gtk.css:9852:3-41: No property named "-unitydecoration-inactive-shadow-color"
+
+(orbit:528019): Gtk-WARNING **: 03:47:17.770: Theme parser error: gtk.css:9853:3-42: No property named "-unitydecoration-inactive-shadow-radius"
+
+(orbit:528019): Gtk-WARNING **: 03:47:17.770: Theme parser error: gtk.css:9854:3-29: No property named "-unitydecoration-glow-size"
+
+(orbit:528019): Gtk-WARNING **: 03:47:17.770: Theme parser error: gtk.css:9855:3-30: No property named "-unitydecoration-glow-color"
+
+(orbit:528019): Gtk-WARNING **: 03:47:17.770: Theme parser error: gtk.css:9856:3-32: No property named "-unitydecoration-title-indent"
+
+(orbit:528019): Gtk-WARNING **: 03:47:17.770: Theme parser error: gtk.css:9857:3-30: No property named "-unitydecoration-title-fade"
+
+(orbit:528019): Gtk-WARNING **: 03:47:17.770: Theme parser error: gtk.css:9858:3-35: No property named "-unitydecoration-title-alignment"
+
+(orbit:528019): Gtk-WARNING **: 03:47:17.770: Theme parser error: gtk.css:9996:3-29: No property named "-gtkwidget-window-dragging"
+
+(orbit:528019): Gtk-WARNING **: 03:47:17.770: Theme parser error: gtk.css:10104:3-29: No property named "-natrayapplet-icon-padding"
+
+(orbit:528019): Gtk-WARNING **: 03:47:17.770: Theme parser error: gtk.css:10105:3-26: No property named "-natrayapplet-icon-size"
+
+(orbit:528019): Gtk-WARNING **: 03:47:17.770: Theme parser error: gtk.css:10109:3-29: No property named "-panelmenubar-icon-visible"
+
+(orbit:528019): Gtk-WARNING **: 03:47:17.770: Theme parser error: gtk.css:10246:3-26: No property named "-gtkarrow-arrow-scaling"
+
+(orbit:528019): Gtk-WARNING **: 03:47:17.770: Theme parser error: gtk.css:10331:3-26: No property named "-gtkarrow-arrow-scaling"
+
+(orbit:528019): Gtk-WARNING **: 03:47:17.771: Theme parser error: gtk.css:11299:3-30: No property named "-xfwmtabwinwidget-icon-size"
+
+(orbit:528019): Gtk-WARNING **: 03:47:17.771: Theme parser error: gtk.css:11300:3-33: No property named "-xfwmtabwinwidget-preview-size"
+
+(orbit:528019): Gtk-WARNING **: 03:47:17.772: Theme parser error: gtk.css:11459:3-41: No property named "-nemoplacestreeview-disk-full-bg-color"
+
+(orbit:528019): Gtk-WARNING **: 03:47:17.772: Theme parser error: gtk.css:11460:3-41: No property named "-nemoplacestreeview-disk-full-fg-color"
+
+(orbit:528019): Gtk-WARNING **: 03:47:17.772: Theme parser error: gtk.css:11461:3-42: No property named "-nemoplacestreeview-disk-full-bar-width"
+
+(orbit:528019): Gtk-WARNING **: 03:47:17.772: Theme parser error: gtk.css:11462:3-43: No property named "-nemoplacestreeview-disk-full-bar-radius"
+
+(orbit:528019): Gtk-WARNING **: 03:47:17.772: Theme parser error: gtk.css:11463:3-47: No property named "-nemoplacestreeview-disk-full-bottom-padding"
+
+(orbit:528019): Gtk-WARNING **: 03:47:17.772: Theme parser error: gtk.css:11464:3-43: No property named "-nemoplacestreeview-disk-full-max-length"
+[2026-03-16T07:47:18Z INFO  orbit::app::daemon] Starting daemon on socket: "/run/user/1000/orbit.sock"
+[2026-03-16T07:47:18Z INFO  orbit::app] Not connected yet, waiting for NetworkManager...
+[2026-03-16T07:47:18Z INFO  orbit::app] UI: Syncing WiFi switch to true
+[2026-03-16T07:47:18Z INFO  orbit::app] Connected to Verizon_BHYJ7L after 0s
+[2026-03-16T07:47:20Z INFO  orbit::ui::saved_networks_list] SavedNetworksList: Rendering 13 networks
+[2026-03-16T07:47:20Z INFO  orbit::dbus::bluez] Bluetooth Agent registered successfully at /com/orbit/agent
+[2026-03-16T07:47:46Z INFO  orbit::app] App: Daemon command Toggle received (tab: Some("vpn"))
+[2026-03-16T07:47:47Z INFO  orbit::app] App: Toggle background refresh started
+[2026-03-16T07:47:47Z INFO  orbit::ui::vpn_list] VpnList: Received 2 profiles
+[2026-03-16T07:47:47Z INFO  orbit::app] App: Background IP check triggered (Toggle)
+
+(orbit:528019): Gtk-WARNING **: 03:47:47.274: GtkImage 0x55be62e4b020 reported baselines of minimum -2147483648 and natural -2147483648, but sizes of minimum 16 and natural 16. Baselines must be inside the widget size.
+
+(orbit:528019): Gtk-WARNING **: 03:47:47.274: GtkImage 0x55be62e4c080 reported baselines of minimum -2147483648 and natural -2147483648, but sizes of minimum 16 and natural 16. Baselines must be inside the widget size.
+
+(orbit:528019): Gtk-WARNING **: 03:47:47.274: GtkImage 0x55be62e51b10 reported baselines of minimum -2147483648 and natural -2147483648, but sizes of minimum 16 and natural 16. Baselines must be inside the widget size.
+
+(orbit:528019): Gtk-WARNING **: 03:47:47.274: GtkImage 0x55be62e52790 reported baselines of minimum -2147483648 and natural -2147483648, but sizes of minimum 16 and natural 16. Baselines must be inside the widget size.
+[2026-03-16T07:47:47Z INFO  orbit::app] App: Trying IP provider (Toggle): https://ifconfig.me/all.json
+[2026-03-16T07:47:47Z INFO  orbit::app] App: IP response (Toggle): {"ip_addr":"2600:4041:798a:aa00:f6c8:8aff:fe77:ecc3","user_agent":"curl/8.5.0","port":"40818","method":"GET","mime":"*/*","via":"1.1 google","forwarded":"2600:4041:798a:aa00:f6c8:8aff:fe77:ecc3,2600:1901:0:b2bd::"}
+[2026-03-16T07:47:47Z INFO  orbit::app] App: Found IP: 2600:4041:798a:aa00:f6c8:8aff:fe77:ecc3 via https://ifconfig.me/all.json
+[2026-03-16T07:47:47Z INFO  orbit::app] App: Updating UI with IP: 2600:4041:798a:aa00:f6c8:8aff:fe77:ecc3, ISP: Direct Connection, DNS: ["2600:4041:798a:aa00:000:000:000:001"]
+[2026-03-16T07:47:47Z INFO  orbit::ui::vpn_list] VpnList: Updating privacy info: IP=2600:4041:798a:aa00:f6c8:8aff:fe77:ecc3, ISP=Direct Connection
+[2026-03-16T07:47:51Z INFO  orbit::app] UI: Syncing WiFi switch to true
+
+(orbit:528019): Gtk-WARNING **: 03:47:51.873: GtkImage 0x55be60f8eed0 reported baselines of minimum -2147483648 and natural -2147483648, but sizes of minimum 16 and natural 16. Baselines must be inside the widget size.
+
+(orbit:528019): Gtk-WARNING **: 03:47:51.873: GtkImage 0x55be60eee510 reported baselines of minimum -2147483648 and natural -2147483648, but sizes of minimum 16 and natural 16. Baselines must be inside the widget size.
+[2026-03-16T07:47:53Z INFO  orbit::app] UI: Syncing Bluetooth switch to true
+[2026-03-16T07:47:55Z INFO  orbit::app] UI: VPN tab button clicked
+[2026-03-16T07:47:55Z INFO  orbit::app] App: VPN tab activation thread started
+[2026-03-16T07:47:55Z INFO  orbit::app] App: Found 2 VPN profiles
+[2026-03-16T07:47:55Z INFO  orbit::ui::vpn_list] VpnList: Received 2 profiles
+
+(orbit:528019): Gtk-WARNING **: 03:47:55.842: GtkImage 0x55be62e51b10 reported baselines of minimum -2147483648 and natural -2147483648, but sizes of minimum 16 and natural 16. Baselines must be inside the widget size.
+
+(orbit:528019): Gtk-WARNING **: 03:47:55.842: GtkImage 0x55be62e4e4c0 reported baselines of minimum -2147483648 and natural -2147483648, but sizes of minimum 16 and natural 16. Baselines must be inside the widget size.
+
+(orbit:528019): Gtk-WARNING **: 03:47:55.842: GtkImage 0x55be62e4b020 reported baselines of minimum -2147483648 and natural -2147483648, but sizes of minimum 16 and natural 16. Baselines must be inside the widget size.
+
+(orbit:528019): Gtk-WARNING **: 03:47:55.842: GtkImage 0x55be62e488d0 reported baselines of minimum -2147483648 and natural -2147483648, but sizes of minimum 16 and natural 16. Baselines must be inside the widget size.
+[2026-03-16T07:47:55Z INFO  orbit::app] App: Fetching public IP info (Manual Click)...
+[2026-03-16T07:47:55Z INFO  orbit::app] App: Trying IP provider (Manual Click): https://ifconfig.me/all.json
+[2026-03-16T07:47:56Z INFO  orbit::app] App: Received response from https://ifconfig.me/all.json
+[2026-03-16T07:47:56Z INFO  orbit::app] App: Detected IP: 2600:4041:798a:aa00:f6c8:8aff:fe77:ecc3, ISP: Direct Connection
+[2026-03-16T07:47:56Z INFO  orbit::app] App: Updating UI with IP: 2600:4041:798a:aa00:f6c8:8aff:fe77:ecc3, ISP: Direct Connection, DNS: ["2600:4041:798a:aa00:000:000:000:001"]
+[2026-03-16T07:47:56Z INFO  orbit::ui::vpn_list] VpnList: Updating privacy info: IP=2600:4041:798a:aa00:f6c8:8aff:fe77:ecc3, ISP=Direct Connection
+[2026-03-16T07:55:30Z INFO  orbit::app] App: Daemon command Toggle received (tab: None)
+[2026-03-16T07:55:30Z INFO  orbit::app] App: Toggle background refresh started
+[2026-03-16T07:55:30Z INFO  orbit::ui::vpn_list] VpnList: Received 2 profiles
+
+(orbit:528019): Gtk-WARNING **: 03:55:30.268: GtkImage 0x55be62e4b020 reported baselines of minimum -2147483648 and natural -2147483648, but sizes of minimum 16 and natural 16. Baselines must be inside the widget size.
+
+(orbit:528019): Gtk-WARNING **: 03:55:30.269: GtkImage 0x55be62e4c080 reported baselines of minimum -2147483648 and natural -2147483648, but sizes of minimum 16 and natural 16. Baselines must be inside the widget size.
+
+(orbit:528019): Gtk-WARNING **: 03:55:30.269: GtkImage 0x55be62e51b10 reported baselines of minimum -2147483648 and natural -2147483648, but sizes of minimum 16 and natural 16. Baselines must be inside the widget size.
+
+(orbit:528019): Gtk-WARNING **: 03:55:30.269: GtkImage 0x55be62e52790 reported baselines of minimum -2147483648 and natural -2147483648, but sizes of minimum 16 and natural 16. Baselines must be inside the widget size.
+[2026-03-16T07:55:30Z INFO  orbit::app] App: Background IP check triggered (Toggle)
+[2026-03-16T07:55:30Z INFO  orbit::app] App: Trying IP provider (Toggle): https://ifconfig.me/all.json
+[2026-03-16T07:55:30Z INFO  orbit::app] App: IP response (Toggle): {"ip_addr":"2600:4041:798a:aa00:f6c8:8aff:fe77:ecc3","user_agent":"curl/8.5.0","port":"59306","method":"GET","mime":"*/*","via":"1.1 google","forwarded":"2600:4041:798a:aa00:f6c8:8aff:fe77:ecc3,2600:1901:0:b2bd::"}
+[2026-03-16T07:55:30Z INFO  orbit::app] App: Found IP: 2600:4041:798a:aa00:f6c8:8aff:fe77:ecc3 via https://ifconfig.me/all.json
+[2026-03-16T07:55:30Z INFO  orbit::app] App: Updating UI with IP: 2600:4041:798a:aa00:f6c8:8aff:fe77:ecc3, ISP: Direct Connection, DNS: ["2600:4041:798a:aa00:000:000:000:001"]
+[2026-03-16T07:55:30Z INFO  orbit::ui::vpn_list] VpnList: Updating privacy info: IP=2600:4041:798a:aa00:f6c8:8aff:fe77:ecc3, ISP=Direct Connection
+[2026-03-16T07:55:33Z INFO  orbit::ui::vpn_list] VpnList: Received 2 profiles
+
+(orbit:528019): Gtk-WARNING **: 03:55:33.371: GtkImage 0x55be62e51b10 reported baselines of minimum -2147483648 and natural -2147483648, but sizes of minimum 16 and natural 16. Baselines must be inside the widget size.
+
+(orbit:528019): Gtk-WARNING **: 03:55:33.371: GtkImage 0x55be62e4e4c0 reported baselines of minimum -2147483648 and natural -2147483648, but sizes of minimum 16 and natural 16. Baselines must be inside the widget size.
+
+(orbit:528019): Gtk-WARNING **: 03:55:33.371: GtkImage 0x55be62e4b020 reported baselines of minimum -2147483648 and natural -2147483648, but sizes of minimum 16 and natural 16. Baselines must be inside the widget size.
+
+(orbit:528019): Gtk-WARNING **: 03:55:33.371: GtkImage 0x55be62e488d0 reported baselines of minimum -2147483648 and natural -2147483648, but sizes of minimum 16 and natural 16. Baselines must be inside the widget size.

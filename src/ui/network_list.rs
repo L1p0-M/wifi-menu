@@ -10,8 +10,6 @@ pub struct NetworkList {
     container: gtk::Box,
     list_box: gtk::Box,
     scan_button: gtk::Button,
-    #[allow(dead_code)]
-    saved_button: gtk::Button,
     search_entry: gtk::SearchEntry,
     networks: Rc<RefCell<Vec<AccessPoint>>>,
     row_actions: Rc<RefCell<HashMap<String, gtk::Box>>>,
@@ -128,7 +126,6 @@ impl NetworkList {
             container,
             list_box,
             scan_button,
-            saved_button: saved_button.clone(),
             search_entry: search_entry.clone(),
             networks: Rc::new(RefCell::new(Vec::new())),
             row_actions: Rc::new(RefCell::new(HashMap::new())),
@@ -525,10 +522,5 @@ impl NetworkList {
     
     pub fn set_on_details<F: Fn(String) + 'static>(&self, callback: F) {
         *self.on_details.borrow_mut() = Some(Rc::new(callback));
-    }
-
-    #[allow(dead_code)]
-    pub fn search_entry(&self) -> &gtk::SearchEntry {
-        &self.search_entry
     }
 }

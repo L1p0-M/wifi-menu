@@ -1,6 +1,6 @@
-# Orbit - WiFi/Bluetooth Manager for Wayland
+# Orbit - WiFi/Bluetooth/VPN Manager for Wayland
 
-A native WiFi/Bluetooth manager for Wayland using Rust, GTK4, and layer-shell with a high-contrast glassmorphism UI.
+A native network manager for Wayland using Rust, GTK4, and layer-shell with a high-contrast glassmorphism UI.
 
 ## Interface Preview
 
@@ -11,33 +11,29 @@ A native WiFi/Bluetooth manager for Wayland using Rust, GTK4, and layer-shell wi
 ## Features
 
 - **WiFi Management**
-  - Scan and list available networks with GTK signal strength icons
-  - Connect to open and secured networks (WPA2/WPA3 support)
-  - Disconnect from active networks
-  - Saved networks tab with autoconnect toggles and forget functionality
-  - Detailed network information (IP, Gateway, DNS, MAC, Speed)
+  - **Smart Search**: Real-time filtering that prioritizes start-of-word matches.
+  - Scan and list available networks with GTK signal strength icons.
+  - Connect to open and secured networks (WPA2/WPA3 support).
+  - Disconnect from active networks.
+  - **Integrated Saved Networks**: Manage autoconnect and forget profiles via a sleek footer overlay.
+  - Detailed network information (IPv4/IPv6, Gateway, DNS, MAC, Speed).
 - **Bluetooth Management**
-  - Scan for nearby devices with device-type specific icons
-  - Pair, connect, disconnect, and remove/forget devices
-  - Clean separation of Connected, Paired, and Available devices
+  - **Device Details**: Show MAC address, trust status, and signal strength (RSSI).
+  - **Battery & Charging**: Real-time battery levels with low-battery alerts and charging indicators.
+  - **Pairing Agent**: Built-in support for PIN/Passkey entry and numeric confirmation.
+  - Scan, pair, connect, disconnect, and remove/forget devices.
+- **VPN & Privacy Dashboard**
+  - **Privacy Dashboard**: Real-time Public IP and ISP detection.
+  - **DNS Identification**: Automatically identifies DNS providers (Local Router, Cloudflare, Google, etc.).
+  - **Unified VPN Control**: Manage NetworkManager profiles and external apps (Riseup, Tailscale, Mullvad).
 - **Modern UI/UX**
   - **High-Contrast Glassmorphism**: High-quality translucent panels with customizable opacity.
   - **Smooth Transitions**: Animated slide-up overlays for passwords, details, and errors.
-  - **Dynamic Positioning**: Can be anchored to any corner or center edge via CLI.
+  - **Dynamic Positioning**: Anchor to any corner or center edge via CLI.
   - **Keyboard Friendly**: `Escape` key support to close overlays or hide the window.
-- **Theme Synchronization - ONLY WORKS WITH my hyprland dot files on the other repo**
+- **Theme Synchronization**
   - **Hot-Reloading**: Change colors in real-time without restarting the application.
-  - **System Integration**: Automatically syncs with system background, foreground, and accent colors.
-  - **Complimentary Logic**: Intelligent luminance detection to ensure perfect text contrast.
-
-<p align="center">
-  <img src="screenshots/orbit_theme.gif" width="600" alt="Orbit Theme Synchronization">
-</p>
-
-- **Daemon Mode & Integration**
-  - Background daemon for instant toggle via Unix socket.
-  - **Systemd Integration**: Native user service for automatic startup.
-  - **Waybar Ready**: Built-in support for Waybar tooltips showing active WiFi name.
+  - Automatically syncs with system background, foreground, and accent colors.
 
 ## Requirements
 
@@ -80,8 +76,11 @@ systemctl --user enable --now orbit
 ## Usage
 
 ```bash
-# Toggle visibility (auto-anchors based on position)
-orbit toggle [top-left|top-center|top-right|center-left|center|center-right|bottom-left|bottom-center|bottom-right]
+# Toggle visibility
+orbit toggle [position]
+
+# Open specific tab directly
+orbit toggle --tab [wifi|bluetooth|vpn]
 
 # Output status in JSON for Waybar
 orbit waybar-status
@@ -89,10 +88,10 @@ orbit waybar-status
 # Manually trigger a theme reload
 orbit reload-theme
 
-# Reload config (position, margins) without restarting
+# Reload config without restarting
 orbit reload-config
 
-# Run as daemon (handled automatically by systemd service)
+# Run as daemon (handled automatically by systemd)
 orbit daemon
 
 # List WiFi networks in terminal
@@ -112,46 +111,26 @@ Orbit is designed to look native in your bar. Add the following module to your W
     "format": "󱗿"
 }
 ```
-**Styling Waybar Module**
-
-Go to your waybar style.css file and just add this in there
-
-```css
-#custom-orbit {
-    background-color: #8b5cf6;          //add whatever color you want
-    color: #ffffff;                     //whatever color you want
-    padding: 6px 12px;
-    margin: 6px 3px;
-    border-radius: 4px;
-}
-```
-
-**Don't forget, depending on where you have Orbit in your waybar, change it's on-click toggle to match. Refer to the usage section above for naming**
 
 ## Configuration
 
 ### Config File (`~/.config/orbit/config.toml`)
 
 ```toml
-# Valid positions: top-left, top-center, top-right,
-#                  center-left, center, center-right,
-#                  bottom-left, bottom-center, bottom-right
 position = "top-right"
-margin-top = 10
-margin-bottom = 10
-margin-left = 10
-margin-right = 10
+margin_top = 10
+margin_bottom = 10
+margin_left = 10
+margin_right = 10
 ```
-
-Run `orbit reload-config` to apply changes without restarting the daemon.
 
 ### Theme File (`~/.config/orbit/theme.toml`)
 
 ```toml
-accent_primary = "#8b5cf6"    # Primary accent (e.g. Violet)
-accent_secondary = "#06b6d4"  # Secondary accent / Hover (e.g. Cyan)
-background = "#1e1e2e"       # System background color
-foreground = "#d4d4d8"       # System text color
+accent_primary = "#8b5cf6"
+accent_secondary = "#06b6d4"
+background = "#1e1e2e"
+foreground = "#d4d4d8"
 ```
 
 ## License

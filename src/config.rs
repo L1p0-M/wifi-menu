@@ -70,20 +70,4 @@ impl Config {
             .join("orbit")
             .join("config.toml"))
     }
-    
-    #[allow(dead_code)]
-    pub fn position_tuple(&self) -> (i32, i32) {
-        match self.position.as_str() {
-            "top-left" => (0, 0),
-            "top-center" => (1, 0),
-            "top-right" => (2, 0),
-            "center-left" => (0, 1),
-            "center" => (1, 1),
-            "center-right" => (2, 1),
-            "bottom-left" => (0, 2),
-            "bottom-center" => (1, 2),
-            "bottom-right" => (2, 2),
-            _ => (1, 1),
-        }
-    }
 }
