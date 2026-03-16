@@ -10,16 +10,17 @@ pub mod daemon;
 use crate::config::Config;
 use crate::theme::Theme;
 use crate::dbus::{NetworkManager, BluetoothManager};
-use crate::dbus::network_manager::{AccessPoint, SecurityType, SavedNetwork, NetworkDetails};
-use crate::dbus::bluez::BluetoothDevice;
+use crate::dbus::network_manager::{AccessPoint, SecurityType, SavedNetwork, NetworkDetails, VpnProfile};
+use crate::dbus::bluez::{BluetoothDevice, BluetoothDeviceDetails};
 use crate::ui::{OrbitWindow, DeviceAction};
 use daemon::{DaemonServer, DaemonCommand};
 
-enum AppEvent {
+pub enum AppEvent {
     WifiScanResult(Vec<AccessPoint>),
     SavedNetworksResult(Vec<SavedNetwork>),
     NetworkDetailsResult(NetworkDetails),
     BtScanResult(Vec<BluetoothDevice>),
+    BtDeviceDetailsResult(BluetoothDeviceDetails),
     WifiPowerState(bool),
     BtPowerState(bool),
     ConnectStarted(String),
@@ -27,7 +28,18 @@ enum AppEvent {
     ConnectHidden(String, String),
     DisconnectStarted(String),
     BtActionStarted(String, DeviceAction),
+    BtTrustStarted(String, bool),
     BtActionComplete,
+    BtTrustComplete,
+    BtPinRequest(String, async_channel::Sender<String>),
+    BtPinDisplay(String, String),
+    BtPasskeyRequest(String, async_channel::Sender<u32>),
+    BtPasskeyDisplay(String, u32, u16),
+    BtConfirmRequest(String, u32, async_channel::Sender<bool>),
+    BtAuthRequest(String, async_channel::Sender<bool>),
+    BtAgentCancel,
+    VpnProfilesResult(Vec<VpnProfile>),
+    PublicIpResult(String, String, Vec<String>, bool),
     Error(String),
     Notify(String),
     CaptivePortal(String),
@@ -190,19 +202,30 @@ impl OrbitApp {
                         }
                     }
                     
-                    if let Some(ref bt) = bt_inst {
+                    if let Some(bt) = bt_inst {
                         if let Ok(powered) = rt_init.block_on(async { bt.is_powered().await }) {
                             let _ = tx_init.send_blocking(AppEvent::BtPowerState(powered));
                         }
                         if let Ok(devices) = rt_init.block_on(async { bt.get_devices().await }) {
                             let _ = tx_init.send_blocking(AppEvent::BtScanResult(devices));
                         }
+                        
+                        // Register Bluetooth Agent
+                        let mut bt_mut = bt.clone();
+                        let tx_agent = tx_init.clone();
+                        let rt_agent = rt_init.clone();
+                        std::thread::spawn(move || {
+                            if let Err(e) = rt_agent.block_on(async { bt_mut.register_agent(tx_agent).await }) {
+                                log::error!("Failed to register Bluetooth Agent: {}", e);
+                            }
+                        });
+                        
+                        let mut bt_guard = bt_arc.lock().unwrap();
+                        *bt_guard = Some(bt);
                     }
                     
                     let mut nm_guard = nm_arc.lock().unwrap();
                     *nm_guard = nm_inst;
-                    let mut bt_guard = bt_arc.lock().unwrap();
-                    *bt_guard = bt_inst;
                 });
             }
             
@@ -212,13 +235,15 @@ impl OrbitApp {
             win.window().connect_notify_local(Some("visible"), move |window, _| {
                 *is_visible_sync.borrow_mut() = window.is_visible();
             });
+
+            let is_switching_pwr = Arc::new(Mutex::new(false));
             
             if !is_daemon {
                 win.show();
             }
             
-            setup_events_receiver(win.clone(), rx.clone(), is_visible.clone(), nm.clone(), bt.clone(), rt.clone(), tx.clone(), win_theme.clone());
-            setup_ui_callbacks(win.clone(), nm.clone(), bt.clone(), rt.clone(), tx.clone(), current_tab.clone());
+            setup_events_receiver(win.clone(), rx.clone(), is_visible.clone(), nm.clone(), bt.clone(), rt.clone(), tx.clone(), win_theme.clone(), is_switching_pwr.clone());
+            setup_ui_callbacks(win.clone(), nm.clone(), bt.clone(), rt.clone(), tx.clone(), current_tab.clone(), is_switching_pwr.clone());
             setup_periodic_refresh(win.clone(), nm, bt, rt.clone(), tx.clone(), is_visible.clone(), current_tab.clone());
         });
         
@@ -235,6 +260,7 @@ fn setup_events_receiver(
     rt: Arc<tokio::runtime::Runtime>,
     tx: async_channel::Sender<AppEvent>,
     win_theme: Rc<RefCell<Theme>>,
+    is_switching_pwr: Arc<Mutex<bool>>,
 ) {
     glib::spawn_future_local(async move {
         while let Ok(event) = rx.recv().await {
@@ -248,10 +274,16 @@ fn setup_events_receiver(
                 AppEvent::NetworkDetailsResult(details) => {
                     win.show_network_details(&details);
                 }
+                AppEvent::BtDeviceDetailsResult(details) => {
+                    win.show_device_details(&details);
+                }
                 AppEvent::BtScanResult(devices) => {
                     win.device_list().set_devices(devices);
                 }
                 AppEvent::WifiPowerState(enabled) => {
+                    if *is_switching_pwr.lock().unwrap() {
+                        continue;
+                    }
                     if let Some(tab) = win.stack().visible_child_name() {
                         let tab_str = tab.as_str();
                         if tab_str == "wifi" || tab_str == "saved" {
@@ -261,11 +293,29 @@ fn setup_events_receiver(
                     }
                 }
                 AppEvent::BtPowerState(enabled) => {
+                    if *is_switching_pwr.lock().unwrap() {
+                        continue;
+                    }
                     if let Some(tab) = win.stack().visible_child_name() {
                         let tab_str = tab.as_str();
                         if tab_str == "bluetooth" {
                             log::info!("UI: Syncing Bluetooth switch to {}", enabled);
                             win.header().set_power_state(enabled);
+
+                            if enabled {
+                                let tx_refresh = tx.clone();
+                                let bt_refresh = bt.clone();
+                                let rt_refresh = rt.clone();
+                                std::thread::spawn(move || {
+                                    std::thread::sleep(std::time::Duration::from_millis(1500));
+                                    let bt_guard = bt_refresh.lock().unwrap();
+                                    if let Some(ref bt_inst) = *bt_guard {
+                                        if let Ok(devices) = rt_refresh.block_on(async { bt_inst.get_devices().await }) {
+                                            let _ = tx_refresh.send_blocking(AppEvent::BtScanResult(devices));
+                                        }
+                                    }
+                                });
+                            }
                         }
                     }
                 }
@@ -350,16 +400,65 @@ fn setup_events_receiver(
                 AppEvent::BtActionComplete => {
                     win.device_list().set_action_state(None, None);
                 }
+                AppEvent::BtTrustStarted(_path, _trust) => {
+                }
+                AppEvent::BtTrustComplete => {
+                }
+                AppEvent::BtPinRequest(path, tx) => {
+                    let name = win.device_list().get_device_name(&path).unwrap_or_else(|| "Unknown Device".to_string());
+                    win.show_bt_pin_request(&name, tx);
+                    win.show();
+                }
+                AppEvent::BtPinDisplay(path, pin) => {
+                    let name = win.device_list().get_device_name(&path).unwrap_or_else(|| "Unknown Device".to_string());
+                    win.show_bt_pin_display(&name, &pin);
+                    win.show();
+                }
+                AppEvent::BtPasskeyRequest(path, tx) => {
+                    let name = win.device_list().get_device_name(&path).unwrap_or_else(|| "Unknown Device".to_string());
+                    win.show_bt_passkey_request(&name, tx);
+                    win.show();
+                }
+                AppEvent::BtPasskeyDisplay(path, passkey, _entered) => {
+                    let name = win.device_list().get_device_name(&path).unwrap_or_else(|| "Unknown Device".to_string());
+                    win.show_bt_passkey_display(&name, passkey);
+                    win.show();
+                }
+                AppEvent::BtConfirmRequest(path, passkey, tx) => {
+                    let name = win.device_list().get_device_name(&path).unwrap_or_else(|| "Unknown Device".to_string());
+                    win.show_bt_confirm_request(&name, passkey, tx);
+                    win.show();
+                }
+                AppEvent::BtAuthRequest(path, tx) => {
+                    let name = win.device_list().get_device_name(&path).unwrap_or_else(|| "Unknown Device".to_string());
+                    win.show_bt_confirm_request(&name, 0, tx);
+                    win.show();
+                }
+                AppEvent::BtAgentCancel => {
+                    win.cancel_bt_agent();
+                }
+                AppEvent::VpnProfilesResult(profiles) => {
+                    win.vpn_list().set_profiles(profiles);
+                }
+                AppEvent::PublicIpResult(ip, isp, dns_servers, is_secure) => {
+                    log::info!("App: Updating UI with IP: {}, ISP: {}, DNS: {:?}", ip, isp, dns_servers);
+                    win.vpn_list().set_privacy_info(&ip, &isp, &dns_servers, is_secure);
+                }
                 AppEvent::DaemonCommand(cmd) => {
                     match cmd {
                         DaemonCommand::Show => {
                             win.show();
                             *is_visible.borrow_mut() = true;
+                            
+                            // Trigger full refresh on show
                             let nm_ref = nm.clone();
                             let bt_ref = bt.clone();
                             let rt_ref = rt.clone();
                             let tx_ref = tx.clone();
+                            
                             std::thread::spawn(move || {
+                                log::info!("App: Show background refresh started");
+                                let mut current_dns = Vec::new();
                                 let nm_guard = nm_ref.lock().unwrap();
                                 if let Some(ref nm_inst) = *nm_guard {
                                     if let Ok(enabled) = rt_ref.block_on(async { nm_inst.is_wifi_enabled().await }) {
@@ -367,6 +466,16 @@ fn setup_events_receiver(
                                     }
                                     if let Ok(aps) = rt_ref.block_on(async { nm_inst.get_access_points().await }) {
                                         let _ = tx_ref.send_blocking(AppEvent::WifiScanResult(aps));
+                                    }
+                                    if let Ok(profiles) = rt_ref.block_on(async { nm_inst.get_vpn_profiles().await }) {
+                                        let _ = tx_ref.send_blocking(AppEvent::VpnProfilesResult(profiles));
+                                    }
+
+                                    // Get current DNS
+                                    if let Some(ssid) = rt_ref.block_on(async { nm_inst.get_active_ssid().await }) {
+                                        if let Ok(details) = rt_ref.block_on(async { nm_inst.get_network_details(&ssid).await }) {
+                                            current_dns = details.dns_servers;
+                                        }
                                     }
                                 }
                                 let bt_guard = bt_ref.lock().unwrap();
@@ -378,13 +487,50 @@ fn setup_events_receiver(
                                         let _ = tx_ref.send_blocking(AppEvent::BtScanResult(devices));
                                     }
                                 }
+
+                                // Trigger IP check
+                                log::info!("App: Fetching public IP info (Show)...");
+                                let client_res = reqwest::blocking::Client::builder()
+                                    .timeout(std::time::Duration::from_secs(5))
+                                    .user_agent("curl/8.5.0")
+                                    .build();
+                                
+                                if let Ok(client) = client_res {
+                                    let providers = [
+                                        "https://ifconfig.me/all.json",
+                                        "https://api.ipify.org?format=json",
+                                        "https://ipapi.co/json/"
+                                    ];
+
+                                    for url in providers {
+                                        if let Ok(response) = client.get(url).send() {
+                                            if let Ok(text) = response.text() {
+                                                if let Ok(json) = serde_json::from_str::<serde_json::Value>(&text) {
+                                                    let ip = json["ip"].as_str() 
+                                                        .or_else(|| json["query"].as_str())
+                                                        .or_else(|| json["ip_addr"].as_str())
+                                                        .unwrap_or("Unknown").to_string();
+                                                    let isp = json["org"].as_str()
+                                                        .or_else(|| json["asn_org"].as_str())
+                                                        .or_else(|| json["isp"].as_str())
+                                                        .unwrap_or("Direct Connection").to_string();
+                                                    let is_secure = isp.to_lowercase().contains("vpn") || 
+                                                                   isp.to_lowercase().contains("hosting");
+                                                    let _ = tx_ref.send_blocking(AppEvent::PublicIpResult(ip, isp, current_dns.clone(), is_secure));
+                                                    return;
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
                             });
                         }
                         DaemonCommand::Hide => {
                             win.hide();
                             *is_visible.borrow_mut() = false;
                         }
-                        DaemonCommand::Toggle(position) => {
+                        DaemonCommand::Toggle(position, tab) => {
+                            log::info!("App: Daemon command Toggle received (tab: {:?})", tab);
                             if *is_visible.borrow() {
                                 win.hide();
                                 *is_visible.borrow_mut() = false;
@@ -392,13 +538,23 @@ fn setup_events_receiver(
                                 if let Some(pos) = position {
                                     win.set_position(&pos);
                                 }
+                                
+                                let _current_target_tab = tab.clone();
+                                if let Some(t) = tab {
+                                    win.set_tab(&t);
+                                }
                                 win.show();
                                 *is_visible.borrow_mut() = true;
+
+                                
                                 let nm_ref = nm.clone();
                                 let bt_ref = bt.clone();
                                 let rt_ref = rt.clone();
                                 let tx_ref = tx.clone();
+                                
                                 std::thread::spawn(move || {
+                                    log::info!("App: Toggle background refresh started");
+                                    let mut current_dns = Vec::new();
                                     let nm_guard = nm_ref.lock().unwrap();
                                     if let Some(ref nm_inst) = *nm_guard {
                                         if let Ok(enabled) = rt_ref.block_on(async { nm_inst.is_wifi_enabled().await }) {
@@ -406,6 +562,16 @@ fn setup_events_receiver(
                                         }
                                         if let Ok(aps) = rt_ref.block_on(async { nm_inst.get_access_points().await }) {
                                             let _ = tx_ref.send_blocking(AppEvent::WifiScanResult(aps));
+                                        }
+                                        if let Ok(profiles) = rt_ref.block_on(async { nm_inst.get_vpn_profiles().await }) {
+                                            let _ = tx_ref.send_blocking(AppEvent::VpnProfilesResult(profiles));
+                                        }
+
+                                        // Get current DNS
+                                        if let Some(ssid) = rt_ref.block_on(async { nm_inst.get_active_ssid().await }) {
+                                            if let Ok(details) = rt_ref.block_on(async { nm_inst.get_network_details(&ssid).await }) {
+                                                current_dns = details.dns_servers;
+                                            }
                                         }
                                     }
                                     let bt_guard = bt_ref.lock().unwrap();
@@ -417,6 +583,51 @@ fn setup_events_receiver(
                                             let _ = tx_ref.send_blocking(AppEvent::BtScanResult(devices));
                                         }
                                     }
+
+                                    // Trigger IP check in background with multi-provider fallback
+                                    let tx_ip = tx_ref.clone();
+                                    std::thread::spawn(move || {
+                                        log::info!("App: Background IP check triggered (Toggle)");
+                                        let client_res = reqwest::blocking::Client::builder()
+                                            .timeout(std::time::Duration::from_secs(5))
+                                            .user_agent("curl/8.5.0")
+                                            .build();
+                                        
+                                        if let Ok(client) = client_res {
+                                            let providers = [
+                                                "https://ifconfig.me/all.json",
+                                                "https://api.ipify.org?format=json",
+                                                "https://ipapi.co/json/"
+                                            ];
+
+                                            for url in providers {
+                                                log::info!("App: Trying IP provider (Toggle): {}", url);
+                                                if let Ok(response) = client.get(url).send() {
+                                                    if let Ok(text) = response.text() {
+                                                        log::info!("App: IP response (Toggle): {}", text);
+                                                        if let Ok(json) = serde_json::from_str::<serde_json::Value>(&text) {
+                                                            let ip = json["ip"].as_str() 
+                                                                .or_else(|| json["query"].as_str())
+                                                                .or_else(|| json["ip_addr"].as_str())
+                                                                .unwrap_or("Unknown").to_string();
+                                                                
+                                                            let isp = json["org"].as_str()
+                                                                .or_else(|| json["asn_org"].as_str())
+                                                                .or_else(|| json["isp"].as_str())
+                                                                .unwrap_or("Direct Connection").to_string();
+                                                                
+                                                            let is_secure = isp.to_lowercase().contains("vpn") || 
+                                                                           isp.to_lowercase().contains("hosting");
+
+                                                            log::info!("App: Found IP: {} via {}", ip, url);
+                                                            let _ = tx_ip.send_blocking(AppEvent::PublicIpResult(ip, isp, current_dns.clone(), is_secure));
+                                                            return;
+                                                        }
+                                                    }
+                                                }
+                                            }
+                                        }
+                                    });
                                 });
                             }
                         }
@@ -451,6 +662,7 @@ fn setup_ui_callbacks(
     rt: Arc<tokio::runtime::Runtime>,
     tx: async_channel::Sender<AppEvent>,
     current_tab: Rc<RefCell<String>>,
+    is_switching_pwr: Arc<Mutex<bool>>,
 ) {
     let header = win.header().clone();
     let stack = win.stack().clone();
@@ -462,6 +674,7 @@ fn setup_ui_callbacks(
     let nm_wifi = nm.clone();
     let rt_wifi = rt.clone();
     let tx_wifi = tx.clone();
+    let is_switching_wifi = is_switching_pwr.clone();
     header.wifi_tab().connect_clicked(move |_| {
         *current_tab_wifi.borrow_mut() = "wifi".to_string();
         stack_wifi.set_visible_child_name("wifi");
@@ -469,34 +682,14 @@ fn setup_ui_callbacks(
         let nm = nm_wifi.clone();
         let rt = rt_wifi.clone();
         let tx = tx_wifi.clone();
+        let is_switching = is_switching_wifi.clone();
         std::thread::spawn(move || {
             let nm_guard = nm.lock().unwrap();
             if let Some(ref nm_inst) = *nm_guard {
                 if let Ok(enabled) = rt.block_on(async { nm_inst.is_wifi_enabled().await }) {
-                    let _ = tx.send_blocking(AppEvent::WifiPowerState(enabled));
-                }
-            }
-        });
-    });
-
-    let stack_saved = stack.clone();
-    let header_saved = header.clone();
-    let current_tab_saved = current_tab.clone();
-    let nm_saved = nm.clone();
-    let rt_saved = rt.clone();
-    let tx_saved = tx.clone();
-    header.saved_tab().connect_clicked(move |_| {
-        *current_tab_saved.borrow_mut() = "saved".to_string();
-        stack_saved.set_visible_child_name("saved");
-        header_saved.set_tab("saved");
-        let nm = nm_saved.clone();
-        let rt = rt_saved.clone();
-        let tx = tx_saved.clone();
-        std::thread::spawn(move || {
-            let nm_guard = nm.lock().unwrap();
-            if let Some(ref nm_inst) = *nm_guard {
-                if let Ok(saved) = rt.block_on(async { nm_inst.get_saved_networks().await }) {
-                    let _ = tx.send_blocking(AppEvent::SavedNetworksResult(saved));
+                    if !*is_switching.lock().unwrap() {
+                        let _ = tx.send_blocking(AppEvent::WifiPowerState(enabled));
+                    }
                 }
             }
         });
@@ -508,6 +701,7 @@ fn setup_ui_callbacks(
     let bt_tab = bt.clone();
     let rt_bt_tab = rt.clone();
     let tx_bt_tab = tx.clone();
+    let is_switching_bt_tab = is_switching_pwr.clone();
     header.bluetooth_tab().connect_clicked(move |_| {
         *current_tab_bt.borrow_mut() = "bluetooth".to_string();
         stack_bt.set_visible_child_name("bluetooth");
@@ -515,11 +709,132 @@ fn setup_ui_callbacks(
         let bt = bt_tab.clone();
         let rt = rt_bt_tab.clone();
         let tx = tx_bt_tab.clone();
+        let is_switching = is_switching_bt_tab.clone();
         std::thread::spawn(move || {
             let bt_guard = bt.lock().unwrap();
             if let Some(ref bt_inst) = *bt_guard {
                 if let Ok(enabled) = rt.block_on(async { bt_inst.is_powered().await }) {
-                    let _ = tx.send_blocking(AppEvent::BtPowerState(enabled));
+                    if !*is_switching.lock().unwrap() {
+                        let _ = tx.send_blocking(AppEvent::BtPowerState(enabled));
+                    }
+                }
+            }
+        });
+    });
+
+    let stack_vpn = stack.clone();
+    let header_vpn = header.clone();
+    let current_tab_vpn = current_tab.clone();
+    let nm_vpn_tab = nm.clone();
+    let rt_vpn_tab = rt.clone();
+    let tx_vpn_tab = tx.clone();
+    header.vpn_tab().connect_clicked(move |_| {
+        log::info!("UI: VPN tab button clicked");
+        *current_tab_vpn.borrow_mut() = "vpn".to_string();
+        stack_vpn.set_visible_child_name("vpn");
+        header_vpn.set_tab("vpn");
+        
+        let nm = nm_vpn_tab.clone();
+        let rt = rt_vpn_tab.clone();
+        let tx = tx_vpn_tab.clone();
+        std::thread::spawn(move || {
+            log::info!("App: VPN tab activation thread started");
+            let mut current_dns = Vec::new();
+            let nm_guard = nm.lock().unwrap();
+            if let Some(ref nm_inst) = *nm_guard {
+                match rt.block_on(async { nm_inst.get_vpn_profiles().await }) {
+                    Ok(profiles) => {
+                        log::info!("App: Found {} VPN profiles", profiles.len());
+                        let _ = tx.send_blocking(AppEvent::VpnProfilesResult(profiles));
+                    }
+                    Err(e) => {
+                        log::error!("App: Failed to fetch VPN profiles: {}", e);
+                    }
+                }
+
+                // Get current DNS servers from active connection
+                if let Some(ssid) = rt.block_on(async { nm_inst.get_active_ssid().await }) {
+                    if let Ok(details) = rt.block_on(async { nm_inst.get_network_details(&ssid).await }) {
+                        current_dns = details.dns_servers;
+                    }
+                }
+            }
+            
+            // Fetch public IP info using a more reliable endpoint that avoids Cloudflare challenges
+            log::info!("App: Fetching public IP info (Manual Click)...");
+            let client_res = reqwest::blocking::Client::builder()
+                .timeout(std::time::Duration::from_secs(5))
+                .user_agent("curl/8.5.0")
+                .build();
+            
+            if let Ok(client) = client_res {
+                // Try multiple providers for redundancy
+                let providers = [
+                    "https://ifconfig.me/all.json",
+                    "https://api.ipify.org?format=json",
+                    "https://ipapi.co/json/"
+                ];
+
+                for url in providers {
+                    log::info!("App: Trying IP provider (Manual Click): {}", url);
+                    match client.get(url).send() {
+                        Ok(response) => {
+                            if let Ok(text) = response.text() {
+                                log::info!("App: Received response from {}", url);
+                                if let Ok(json) = serde_json::from_str::<serde_json::Value>(&text) {
+                                    let ip = json["ip"].as_str() 
+                                        .or_else(|| json["query"].as_str())
+                                        .or_else(|| json["ip_addr"].as_str())
+                                        .unwrap_or("Unknown").to_string();
+                                        
+                                    let isp = json["org"].as_str()
+                                        .or_else(|| json["asn_org"].as_str())
+                                        .or_else(|| json["isp"].as_str())
+                                        .unwrap_or("Direct Connection").to_string();
+                                        
+                                    let is_secure = isp.to_lowercase().contains("vpn") || 
+                                                   isp.to_lowercase().contains("hosting") ||
+                                                   url.contains("vpn");
+
+                                    log::info!("App: Detected IP: {}, ISP: {}", ip, isp);
+                                    let _ = tx.send_blocking(AppEvent::PublicIpResult(ip, isp, current_dns.clone(), is_secure));
+                                    return;
+                                }
+                            }
+                        }
+                        Err(e) => log::warn!("App: Provider {} failed (Manual Click): {}", url, e),
+                    }
+                }
+            }
+
+            let _ = tx.send_blocking(AppEvent::PublicIpResult(
+                "Unavailable".to_string(), 
+                "Check connection".to_string(), 
+                current_dns,
+                false
+            ));
+        });
+    });
+
+    let win_saved = win.clone();
+    let nm_saved = nm.clone();
+    let rt_saved = rt.clone();
+    let tx_saved = tx.clone();
+    win.network_list().set_on_show_saved(move || {
+        win_saved.show_saved_networks();
+        let nm = nm_saved.clone();
+        let rt = rt_saved.clone();
+        let tx = tx_saved.clone();
+        std::thread::spawn(move || {
+            let nm_guard = nm.lock().unwrap();
+            if let Some(ref nm_inst) = *nm_guard {
+                match rt.block_on(async { nm_inst.get_saved_networks().await }) {
+                    Ok(saved) => {
+                        let _ = tx.send_blocking(AppEvent::SavedNetworksResult(saved));
+                    }
+                    Err(e) => {
+                        let _ = tx.send_blocking(AppEvent::Error(format!("Failed to fetch saved networks: {}", e)));
+                    }
                 }
             }
         });
@@ -667,7 +982,6 @@ fn setup_ui_callbacks(
                 let ssid_val = ssid.clone();
                 let ap_path_val = ap_path.clone();
                 std::thread::spawn(move || {
-                    log::info!("UI: Connect clicked for network: '{}' (Has saved: {})", ssid_val, has_saved);
                     let nm_guard = nm_val.lock().unwrap();
                     if let Some(ref nm_inst) = *nm_guard {
                         match rt_val.block_on(async { nm_inst.connect_to_network(&ssid_val, None, &ap_path_val).await }) {
@@ -702,7 +1016,6 @@ fn setup_ui_callbacks(
 
                         let _ = tx_inner.send_blocking(AppEvent::ConnectStarted(ssid_inner.clone()));
                         std::thread::spawn(move || {
-                            log::info!("UI: Connect clicked (with password) for: '{}'", ssid_inner);
                             let nm_guard = nm_inner.lock().unwrap();
                             if let Some(ref nm_inst) = *nm_guard {
                                 match rt_inner.block_on(async { nm_inst.connect_to_network(&ssid_inner, Some(&pwd), &ap_path_inner).await }) {
@@ -743,6 +1056,85 @@ fn setup_ui_callbacks(
                     }
                     Err(e) => {
                         let _ = tx.send_blocking(AppEvent::Error(format!("Failed to get network details: {}", e)));
+                    }
+                }
+            }
+        });
+    });
+
+    let bt_details = bt.clone();
+    let rt_details_bt = rt.clone();
+    let tx_details_bt = tx.clone();
+    win.device_list().set_on_details(move |path: String| {
+        let bt = bt_details.clone();
+        let rt = rt_details_bt.clone();
+        let tx = tx_details_bt.clone();
+        std::thread::spawn(move || {
+            let bt_guard = bt.lock().unwrap();
+            if let Some(ref bt_inst) = *bt_guard {
+                match rt.block_on(async { bt_inst.get_device_details(&path).await }) {
+                    Ok(details) => {
+                        let _ = tx.send_blocking(AppEvent::BtDeviceDetailsResult(details));
+                    }
+                    Err(e) => {
+                        let _ = tx.send_blocking(AppEvent::Error(format!("Failed to get device details: {}", e)));
+                    }
+                }
+            }
+        });
+    });
+
+    let bt_trust = bt.clone();
+    let rt_trust = rt.clone();
+    let tx_trust = tx.clone();
+    win.set_on_details_action(move |path, trusted| {
+        let bt = bt_trust.clone();
+        let rt = rt_trust.clone();
+        let tx = tx_trust.clone();
+        let _ = tx.send_blocking(AppEvent::BtTrustStarted(path.clone(), trusted));
+        std::thread::spawn(move || {
+            let bt_guard = bt.lock().unwrap();
+            if let Some(ref bt_inst) = *bt_guard {
+                match rt.block_on(async { bt_inst.set_trusted(&path, trusted).await }) {
+                    Ok(()) => {
+                        let _ = tx.send_blocking(AppEvent::BtTrustComplete);
+                        // Refresh details
+                        if let Ok(details) = rt.block_on(async { bt_inst.get_device_details(&path).await }) {
+                            let _ = tx.send_blocking(AppEvent::BtDeviceDetailsResult(details));
+                        }
+                    }
+                    Err(e) => {
+                        let _ = tx.send_blocking(AppEvent::BtTrustComplete);
+                        let _ = tx.send_blocking(AppEvent::Error(format!("Failed to update trust status: {}", e)));
+                    }
+                }
+            }
+        });
+    });
+
+    let bt_forget = bt.clone();
+    let rt_forget_bt = rt.clone();
+    let tx_forget_bt = tx.clone();
+    win.set_on_forget_device(move |path| {
+        let bt = bt_forget.clone();
+        let rt = rt_forget_bt.clone();
+        let tx = tx_forget_bt.clone();
+        let _ = tx.send_blocking(AppEvent::BtActionStarted(path.clone(), DeviceAction::Forget));
+        std::thread::spawn(move || {
+            let bt_guard = bt.lock().unwrap();
+            if let Some(ref bt_inst) = *bt_guard {
+                match rt.block_on(async { bt_inst.forget_device(&path).await }) {
+                    Ok(()) => {
+                        let _ = tx.send_blocking(AppEvent::BtActionComplete);
+                        let _ = tx.send_blocking(AppEvent::Notify("Device forgotten".to_string()));
+                        std::thread::sleep(std::time::Duration::from_millis(500));
+                        if let Ok(devices) = rt.block_on(async { bt_inst.get_devices().await }) {
+                            let _ = tx.send_blocking(AppEvent::BtScanResult(devices));
+                        }
+                    }
+                    Err(e) => {
+                        let _ = tx.send_blocking(AppEvent::BtActionComplete);
+                        let _ = tx.send_blocking(AppEvent::Error(format!("Forget failed: {}", e)));
                     }
                 }
             }
@@ -792,9 +1184,10 @@ fn setup_ui_callbacks(
                     Ok(()) => {
                         let _ = tx.send_blocking(AppEvent::BtActionComplete);
                         std::thread::sleep(std::time::Duration::from_millis(500));
-                        if let Ok(devices) = rt.block_on(async { bt_inst.get_devices().await }) {
-                            let _ = tx.send_blocking(AppEvent::BtScanResult(devices));
-                        }
+                    if let Ok(devices) = rt.block_on(async { bt_inst.get_devices().await }) {
+                        let _ = tx.send_blocking(AppEvent::BtScanResult(devices));
+                    }
+
                     }
                     Err(e) => {
                         let _ = tx.send_blocking(AppEvent::BtActionComplete);
@@ -807,45 +1200,91 @@ fn setup_ui_callbacks(
             }
         });
     });
+
+    let nm_vpn_act = nm.clone();
+    let rt_vpn_act = rt.clone();
+    let tx_vpn_act = tx.clone();
+    win.vpn_list().set_on_toggle(move |path, state| {
+        let nm = nm_vpn_act.clone();
+        let rt = rt_vpn_act.clone();
+        let tx = tx_vpn_act.clone();
+        std::thread::spawn(move || {
+            let nm_guard = nm.lock().unwrap();
+            if let Some(ref nm_inst) = *nm_guard {
+                let res = if state {
+                    rt.block_on(async { nm_inst.activate_vpn(&path).await })
+                } else {
+                    rt.block_on(async { nm_inst.deactivate_vpn(&path).await })
+                };
+                
+                if let Err(e) = res {
+                    let _ = tx.send_blocking(AppEvent::Error(format!("VPN Action failed: {}", e)));
+                }
+                
+                // Refresh list
+                std::thread::sleep(std::time::Duration::from_millis(500));
+                if let Ok(profiles) = rt.block_on(async { nm_inst.get_vpn_profiles().await }) {
+                    let _ = tx.send_blocking(AppEvent::VpnProfilesResult(profiles));
+                }
+            }
+        });
+    });
     
     let nm_pwr = nm.clone();
-    let bt_pwr = bt.clone();
+    let bt_pwr_ref = bt.clone();
     let rt_pwr = rt.clone();
     let tx_pwr = tx.clone();
     let current_tab_pwr = current_tab.clone();
     let win_pwr_switch = win.clone();
+    let is_switching_toggle = is_switching_pwr.clone();
     win.header().power_switch().connect_active_notify(move |switch| {
         let header = win_pwr_switch.header();
         if header.is_programmatic_update() {
-            log::info!("Toggle: Ignoring programmatic update");
             return;
         }
 
         let enabled = switch.is_active();
         let nm = nm_pwr.clone();
-        let bt = bt_pwr.clone();
+        let bt = bt_pwr_ref.clone();
         let rt = rt_pwr.clone();
         let tx = tx_pwr.clone();
         let tab = current_tab_pwr.borrow().clone();
+        let is_switching = is_switching_toggle.clone();
         
-        log::info!("Toggle: Power switch active notify to {} (Active tab: '{}')", enabled, tab);
+        *is_switching.lock().unwrap() = true;
+        let is_switching_end = is_switching.clone();
+        let nm_thread = nm.clone();
+        let rt_thread = rt.clone();
+        let tx_thread = tx.clone();
+        let bt_thread = bt.clone();
+        let rt_bt_thread = rt.clone();
+        let tx_bt_thread = tx.clone();
 
         std::thread::spawn(move || {
             if tab == "wifi" || tab == "saved" {
-                log::info!("Toggle: Executing WiFi power change to {}", enabled);
-                let nm_guard = nm.lock().unwrap();
+                let nm_guard = nm_thread.lock().unwrap();
                 if let Some(ref nm_inst) = *nm_guard {
-                    let _ = rt.block_on(async { nm_inst.set_wifi_enabled(enabled).await });
-                    let _ = tx.send_blocking(AppEvent::WifiPowerState(enabled));
+                    let _ = rt_thread.block_on(async { nm_inst.set_wifi_enabled(enabled).await });
+                    let _ = tx_thread.send_blocking(AppEvent::WifiPowerState(enabled));
                 }
             } else if tab == "bluetooth" {
-                log::info!("Toggle: Executing Bluetooth power change to {}", enabled);
-                let bt_guard = bt.lock().unwrap();
+                let bt_guard = bt_thread.lock().unwrap();
                 if let Some(ref bt_inst) = *bt_guard {
-                    let _ = rt.block_on(async { bt_inst.set_powered(enabled).await });
-                    let _ = tx.send_blocking(AppEvent::BtPowerState(enabled));
+                    match rt_bt_thread.block_on(async { bt_inst.set_powered(enabled).await }) {
+                        Ok(()) => {
+                            let _ = tx_bt_thread.send_blocking(AppEvent::BtPowerState(enabled));
+                        },
+                        Err(e) => {
+                            let _ = tx_bt_thread.send_blocking(AppEvent::Error(format!("Failed to toggle Bluetooth: {}", e)));
+                            if let Ok(actual) = rt_bt_thread.block_on(async { bt_inst.is_powered().await }) {
+                                let _ = tx_bt_thread.send_blocking(AppEvent::BtPowerState(actual));
+                            }
+                        }
+                    }
                 }
             }
+            std::thread::sleep(std::time::Duration::from_secs(2));
+            *is_switching_end.lock().unwrap() = false;
         });
     });
 }

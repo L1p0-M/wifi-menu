@@ -21,6 +21,7 @@ pub struct DeviceList {
     devices: Rc<RefCell<Vec<BluetoothDevice>>>,
     row_actions: Rc<RefCell<HashMap<String, gtk::Box>>>,
     on_action: Rc<RefCell<Option<Rc<dyn Fn(String, DeviceAction)>>>>,
+    on_details: Rc<RefCell<Option<Rc<dyn Fn(String)>>>>,
     action_path: Rc<RefCell<Option<String>>>,
     action_type: Rc<RefCell<Option<DeviceAction>>>,
 }
@@ -70,6 +71,7 @@ impl DeviceList {
             devices: Rc::new(RefCell::new(Vec::new())),
             row_actions: Rc::new(RefCell::new(HashMap::new())),
             on_action: Rc::new(RefCell::new(None)),
+            on_details: Rc::new(RefCell::new(None)),
             action_path: Rc::new(RefCell::new(None)),
             action_type: Rc::new(RefCell::new(None)),
         };
@@ -219,6 +221,16 @@ impl DeviceList {
         row.add_controller(focus_in);
         row.add_controller(focus_out);
 
+        let click_gesture = gtk::GestureClick::new();
+        let path_click = device.path.clone();
+        let on_details_click = self.on_details.clone();
+        click_gesture.connect_pressed(move |_, _, _, _| {
+            if let Some(callback) = on_details_click.borrow().as_ref() {
+                callback(path_click.clone());
+            }
+        });
+        row.add_controller(click_gesture);
+
         let icon_name = match device.device_type {
             Some(DeviceType::Audio) => "audio-headphones-symbolic",
             Some(DeviceType::Keyboard) => "input-keyboard-symbolic",
@@ -231,6 +243,7 @@ impl DeviceList {
             .icon_name(icon_name)
             .pixel_size(20)
             .css_classes(["orbit-device-icon"])
+            .valign(gtk::Align::Center)
             .build();
         row.append(&icon);
         
@@ -248,12 +261,14 @@ impl DeviceList {
             .build();
         info_box.append(&name);
         
+        let status_row = gtk::Box::builder()
+            .orientation(Orientation::Horizontal)
+            .spacing(6)
+            .halign(gtk::Align::Start)
+            .build();
+
         let status_text = if device.is_connected {
-            if let Some(ref battery) = device.battery_percentage {
-                format!("Connected · {}%", battery)
-            } else {
-                "Connected".to_string()
-            }
+            "Connected".to_string()
         } else if device.is_paired {
             "Paired".to_string()
         } else {
@@ -265,8 +280,54 @@ impl DeviceList {
             .css_classes(["orbit-status"])
             .halign(gtk::Align::Start)
             .build();
-        info_box.append(&status);
+        status_row.append(&status);
+
+        if let Some(battery) = device.battery_percentage {
+            let separator = gtk::Label::builder()
+                .label("·")
+                .css_classes(["orbit-status"])
+                .build();
+            status_row.append(&separator);
+
+            let battery_box = gtk::Box::builder()
+                .orientation(Orientation::Horizontal)
+                .spacing(2)
+                .build();
+
+            let mut bat_classes = vec!["orbit-battery-mini"];
+            if battery < 20 {
+                bat_classes.push("low");
+            }
+
+            let battery_icon_name = if device.is_charging {
+                "battery-flash-symbolic"
+            } else if battery < 20 {
+                "battery-caution-symbolic"
+            } else if battery < 40 {
+                "battery-low-symbolic"
+            } else if battery < 70 {
+                "battery-good-symbolic"
+            } else {
+                "battery-full-symbolic"
+            };
+
+            let battery_icon = gtk::Image::builder()
+                .icon_name(battery_icon_name)
+                .pixel_size(10)
+                .css_classes(bat_classes.clone())
+                .build();
+            
+            let battery_label = gtk::Label::builder()
+                .label(&format!("{}%", battery))
+                .css_classes(bat_classes)
+                .build();
+            
+            battery_box.append(&battery_icon);
+            battery_box.append(&battery_label);
+            status_row.append(&battery_box);
+        }
         
+        info_box.append(&status_row);
         row.append(&info_box);
         
         let actions_box = gtk::Box::builder()
@@ -342,20 +403,21 @@ impl DeviceList {
             actions_box.append(&action_btn);
             
             if device.is_paired {
-                let forget_btn = gtk::Button::builder()
-                    .label("Forget")
-                    .css_classes(["orbit-button", "destructive", "flat"])
+                let details_btn = gtk::Button::builder()
+                    .icon_name("help-about-symbolic")
+                    .css_classes(["orbit-button", "flat"])
+                    .tooltip_text("Device Details")
                     .build();
                 
                 let path = device.path.clone();
-                let on_action = self.on_action.clone();
-                forget_btn.connect_clicked(move |_| {
-                    if let Some(callback) = on_action.borrow().as_ref() {
-                        callback(path.clone(), DeviceAction::Forget);
+                let on_details = self.on_details.clone();
+                details_btn.connect_clicked(move |_| {
+                    if let Some(callback) = on_details.borrow().as_ref() {
+                        callback(path.clone());
                     }
                 });
                 
-                actions_box.append(&forget_btn);
+                actions_box.append(&details_btn);
             }
         }
     }
@@ -370,5 +432,15 @@ impl DeviceList {
     
     pub fn set_on_action<F: Fn(String, DeviceAction) + 'static>(&self, callback: F) {
         *self.on_action.borrow_mut() = Some(Rc::new(callback));
+    }
+
+    pub fn set_on_details<F: Fn(String) + 'static>(&self, callback: F) {
+        *self.on_details.borrow_mut() = Some(Rc::new(callback));
+    }
+
+    pub fn get_device_name(&self, path: &str) -> Option<String> {
+        self.devices.borrow().iter()
+            .find(|d| d.path == path)
+            .map(|d| d.name.clone())
     }
 }

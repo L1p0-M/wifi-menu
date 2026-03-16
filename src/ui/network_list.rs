@@ -10,10 +10,13 @@ pub struct NetworkList {
     container: gtk::Box,
     list_box: gtk::Box,
     scan_button: gtk::Button,
+    saved_button: gtk::Button,
+    search_entry: gtk::SearchEntry,
     networks: Rc<RefCell<Vec<AccessPoint>>>,
     row_actions: Rc<RefCell<HashMap<String, gtk::Box>>>,
     on_connect: Rc<RefCell<Option<Rc<dyn Fn(AccessPoint)>>>>,
     on_connect_hidden: Rc<RefCell<Option<Rc<dyn Fn()>>>>,
+    on_show_saved: Rc<RefCell<Option<Rc<dyn Fn()>>>>,
     on_details: Rc<RefCell<Option<Rc<dyn Fn(String)>>>>,
     connecting_ssid: Rc<RefCell<Option<String>>>,
     disconnecting_ssid: Rc<RefCell<Option<String>>>,
@@ -26,6 +29,55 @@ impl NetworkList {
             .vexpand(true)
             .hexpand(true)
             .build();
+
+        let search_box = gtk::Box::builder()
+            .orientation(Orientation::Horizontal)
+            .css_classes(["orbit-search-container"])
+            .margin_start(8)
+            .margin_end(8)
+            .margin_top(4)
+            .margin_bottom(8)
+            .build();
+
+        let list_box = gtk::Box::builder()
+            .orientation(Orientation::Vertical)
+            .css_classes(["orbit-list"])
+            .focusable(true)
+            .build();
+
+        let search_entry = gtk::SearchEntry::builder()
+            .placeholder_text("Search networks...")
+            .hexpand(true)
+            .css_classes(["orbit-search-entry"])
+            .can_focus(true)
+            .build();
+        
+        let esc_handler = gtk::EventControllerKey::new();
+        let search_clone = search_entry.clone();
+        let list_box_focus = list_box.clone();
+        let win_weak = container.clone(); // We'll use this to get the window
+        esc_handler.connect_key_pressed(move |_, key, _, _| {
+            if key == gtk4::gdk::Key::Escape {
+                if !search_clone.text().is_empty() {
+                    search_clone.set_text("");
+                    list_box_focus.grab_focus();
+                    return gtk4::glib::Propagation::Stop;
+                } else {
+                    // Search is empty, hide the window manually
+                    if let Some(root) = win_weak.root() {
+                        if let Some(win) = root.downcast_ref::<gtk::Window>() {
+                            win.set_visible(false);
+                        }
+                    }
+                    return gtk4::glib::Propagation::Stop;
+                }
+            }
+            gtk4::glib::Propagation::Proceed
+        });
+        search_entry.add_controller(esc_handler);
+
+        search_box.append(&search_entry);
+        container.append(&search_box);
         
         let scrolled = gtk::ScrolledWindow::builder()
             .vexpand(true)
@@ -33,11 +85,6 @@ impl NetworkList {
             .hscrollbar_policy(gtk::PolicyType::Never)
             .min_content_height(280)
             .css_classes(["orbit-scrolled"])
-            .build();
-        
-        let list_box = gtk::Box::builder()
-            .orientation(Orientation::Vertical)
-            .css_classes(["orbit-list"])
             .build();
         
         scrolled.set_child(Some(&list_box));
@@ -50,37 +97,68 @@ impl NetworkList {
             .build();
         
         let scan_button = gtk::Button::builder()
-            .label(" Scan for Networks")
+            .label(" Scan")
+            .icon_name("view-refresh-symbolic")
             .css_classes(["orbit-button", "primary", "flat"])
             .hexpand(true)
+            .tooltip_text("Scan for Networks")
             .build();
 
         let hidden_button = gtk::Button::builder()
-            .label(" Hidden Network")
+            .label(" Hidden")
+            .icon_name("network-wireless-encrypted-symbolic")
             .css_classes(["orbit-button", "flat"])
+            .tooltip_text("Hidden Network")
+            .build();
+        
+        let saved_button = gtk::Button::builder()
+            .label(" Saved")
+            .icon_name("document-open-recent-symbolic")
+            .css_classes(["orbit-button", "flat"])
+            .tooltip_text("Saved Networks")
             .build();
         
         footer.append(&scan_button);
         footer.append(&hidden_button);
+        footer.append(&saved_button);
         container.append(&footer);
         
         let list = Self {
             container,
             list_box,
             scan_button,
+            saved_button: saved_button.clone(),
+            search_entry: search_entry.clone(),
             networks: Rc::new(RefCell::new(Vec::new())),
             row_actions: Rc::new(RefCell::new(HashMap::new())),
             on_connect: Rc::new(RefCell::new(None)),
             on_connect_hidden: Rc::new(RefCell::new(None)),
+            on_show_saved: Rc::new(RefCell::new(None)),
             on_details: Rc::new(RefCell::new(None)),
             connecting_ssid: Rc::new(RefCell::new(None)),
             disconnecting_ssid: Rc::new(RefCell::new(None)),
         };
 
+        let list_clone = list.clone();
+        search_entry.connect_search_changed(move |_| {
+            let networks = list_clone.networks.borrow().clone();
+            list_clone.render_networks(&networks);
+        });
+
         let on_connect_hidden_cb = list.on_connect_hidden.clone();
         hidden_button.connect_clicked(move |_| {
             if let Some(cb) = on_connect_hidden_cb.borrow().as_ref() {
                 cb();
+            }
+        });
+        
+        let on_show_saved_cb = list.on_show_saved.clone();
+        saved_button.connect_clicked(move |_| {
+            log::info!("UI: Saved button clicked");
+            if let Some(cb) = on_show_saved_cb.borrow().as_ref() {
+                cb();
+            } else {
+                log::warn!("UI: No callback set for show_saved");
             }
         });
         
@@ -205,9 +283,29 @@ impl NetworkList {
             self.show_placeholder();
             return;
         }
+
+        let query = self.search_entry.text().to_string().to_lowercase();
         
-        let connected_networks: Vec<&AccessPoint> = networks.iter().filter(|n| n.is_connected).collect();
-        let available_networks: Vec<&AccessPoint> = networks.iter().filter(|n| !n.is_connected).collect();
+        let filtered_networks: Vec<&AccessPoint> = if query.is_empty() {
+            networks.iter().collect()
+        } else {
+            networks.iter().filter(|n| {
+                let name = n.ssid.to_lowercase();
+                name.starts_with(&query) || name.contains(&query)
+            }).collect()
+        };
+
+        if filtered_networks.is_empty() && !query.is_empty() {
+            let no_match = gtk::Label::builder()
+                .label(&format!("No networks matching '{}'", query))
+                .css_classes(["orbit-placeholder"])
+                .build();
+            self.list_box.append(&no_match);
+            return;
+        }
+        
+        let connected_networks: Vec<&&AccessPoint> = filtered_networks.iter().filter(|n| n.is_connected).collect();
+        let available_networks: Vec<&&AccessPoint> = filtered_networks.iter().filter(|n| !n.is_connected).collect();
         
         if !connected_networks.is_empty() {
             let section_header = gtk::Label::builder()
@@ -314,7 +412,7 @@ impl NetworkList {
         self.build_actions_box_content(&actions_box, network);
         
         self.row_actions.borrow_mut().insert(network.ssid.clone(), actions_box.clone());
-
+ 
         row.append(&actions_box);
         row
     }
@@ -325,6 +423,7 @@ impl NetworkList {
                 .icon_name("system-lock-screen-symbolic")
                 .pixel_size(14)
                 .css_classes(["orbit-signal-icon"])
+                .tooltip_text("Secure Network")
                 .build();
             actions_box.append(&lock_icon);
         }
@@ -388,6 +487,7 @@ impl NetworkList {
             let details_btn = gtk::Button::builder()
                 .label("Details")
                 .css_classes(["orbit-button", "flat"])
+                .tooltip_text("Network Details")
                 .build();
             
             let ssid = network.ssid.clone();
@@ -417,8 +517,16 @@ impl NetworkList {
     pub fn set_on_connect_hidden<F: Fn() + 'static>(&self, callback: F) {
         *self.on_connect_hidden.borrow_mut() = Some(Rc::new(callback));
     }
+
+    pub fn set_on_show_saved<F: Fn() + 'static>(&self, callback: F) {
+        *self.on_show_saved.borrow_mut() = Some(Rc::new(callback));
+    }
     
     pub fn set_on_details<F: Fn(String) + 'static>(&self, callback: F) {
         *self.on_details.borrow_mut() = Some(Rc::new(callback));
+    }
+
+    pub fn search_entry(&self) -> &gtk::SearchEntry {
+        &self.search_entry
     }
 }

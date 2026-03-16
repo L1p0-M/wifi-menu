@@ -28,6 +28,9 @@ enum Commands {
     Toggle {
         /// Optional position override (top-left, top-center, top-right, center-left, center, center-right, bottom-left, bottom-center, bottom-right)
         position: Option<String>,
+        /// Optional tab to switch to (wifi, saved, bluetooth)
+        #[arg(long, short)]
+        tab: Option<String>,
     },
     /// Reload theme from configuration
     ReloadTheme,
@@ -46,7 +49,7 @@ fn main() {
     match cli.command {
         Some(Commands::List) => list_networks(),
         Some(Commands::Daemon) => run_daemon(config),
-        Some(Commands::Toggle { position }) => toggle_daemon(position),
+        Some(Commands::Toggle { position, tab }) => toggle_daemon(position, tab),
         Some(Commands::ReloadTheme) => reload_theme(),
         Some(Commands::ReloadConfig) => reload_config(),
         Some(Commands::WaybarStatus) => waybar_status(),
@@ -69,13 +72,13 @@ fn run_daemon(config: Config) {
     app.run();
 }
 
-fn toggle_daemon(position: Option<String>) {
+fn toggle_daemon(position: Option<String>, tab: Option<String>) {
     if !DaemonClient::is_daemon_running() {
         eprintln!("Daemon is not running. Start it with: orbit daemon");
         std::process::exit(1);
     }
     
-    match DaemonClient::send_command(DaemonCommand::Toggle(position)) {
+    match DaemonClient::send_command(DaemonCommand::Toggle(position, tab)) {
         Ok(response) => {
             println!("Daemon response: {}", response);
         }
@@ -167,4 +170,10 @@ fn list_networks() {
             }
         }
     });
+}
+
+pub fn init_logger() {
+    env_logger::Builder::from_default_env()
+        .filter_level(log::LevelFilter::Info)
+        .init();
 }

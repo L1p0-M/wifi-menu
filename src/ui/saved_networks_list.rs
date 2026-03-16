@@ -17,29 +17,37 @@ impl SavedNetworksList {
     pub fn new() -> Self {
         let container = gtk::Box::builder()
             .orientation(Orientation::Vertical)
-            .vexpand(true)
+            .css_classes(["orbit-saved-list-container"])
             .hexpand(true)
+            .vexpand(true)
             .build();
         
         let scrolled = gtk::ScrolledWindow::builder()
             .vexpand(true)
             .hexpand(true)
             .hscrollbar_policy(gtk::PolicyType::Never)
-            .min_content_height(280)
+            .min_content_height(350)
+            .min_content_width(340)
+            .height_request(350)
             .css_classes(["orbit-scrolled"])
             .build();
+
+
         
         let list_box = gtk::Box::builder()
             .orientation(Orientation::Vertical)
             .css_classes(["orbit-list"])
+            .focusable(true)
+            .vexpand(true)
             .build();
+
         
         scrolled.set_child(Some(&list_box));
         container.append(&scrolled);
         
         let list = Self {
-            container,
-            list_box,
+            container: container.clone(),
+            list_box: list_box.clone(),
             networks: Rc::new(RefCell::new(Vec::new())),
             on_autoconnect_toggle: Rc::new(RefCell::new(None)),
             on_forget: Rc::new(RefCell::new(None)),
@@ -66,6 +74,7 @@ impl SavedNetworksList {
     }
     
     pub fn set_networks(&self, networks: Vec<SavedNetwork>) {
+        log::info!("SavedNetworksList: Rendering {} networks", networks.len());
         *self.networks.borrow_mut() = networks.clone();
         
         while let Some(child) = self.list_box.first_child() {
@@ -73,6 +82,7 @@ impl SavedNetworksList {
         }
         
         if networks.is_empty() {
+            log::info!("SavedNetworksList: No networks to show");
             self.show_placeholder();
             return;
         }
@@ -118,7 +128,7 @@ impl SavedNetworksList {
         
         let row = gtk::Box::builder()
             .orientation(Orientation::Horizontal)
-            .spacing(12)
+            .spacing(6)
             .css_classes(css_classes)
             .focusable(true)
             .build();
@@ -145,7 +155,7 @@ impl SavedNetworksList {
             
             let wifi_icon = gtk::Image::builder()
                 .icon_name("network-wireless-symbolic")
-                .pixel_size(20)
+                .pixel_size(16)
                 .css_classes(["orbit-icon-accent"])
                 .build();
             icon_container.append(&wifi_icon);
@@ -153,7 +163,7 @@ impl SavedNetworksList {
         } else {
             let wifi_icon = gtk::Image::builder()
                 .icon_name("network-wireless-symbolic")
-                .pixel_size(20)
+                .pixel_size(16)
                 .css_classes(["orbit-signal-icon"])
                 .build();
             row.append(&wifi_icon);
@@ -161,7 +171,7 @@ impl SavedNetworksList {
         
         let info_box = gtk::Box::builder()
             .orientation(Orientation::Vertical)
-            .spacing(2)
+            .spacing(0)
             .hexpand(true)
             .valign(gtk::Align::Center)
             .build();
@@ -170,51 +180,53 @@ impl SavedNetworksList {
             .label(&network.ssid)
             .css_classes(["orbit-ssid"])
             .halign(gtk::Align::Start)
+            .ellipsize(gtk::pango::EllipsizeMode::End)
             .build();
         info_box.append(&ssid);
         
+        let status_row = gtk::Box::builder()
+            .orientation(Orientation::Horizontal)
+            .spacing(4)
+            .halign(gtk::Align::Start)
+            .build();
+
         let status_text = if network.is_active {
-            "Connected"
+            "Connected".to_string()
         } else if network.autoconnect {
-            "Auto-connect enabled"
+            "Auto-connect enabled".to_string()
         } else {
-            "Manual connect"
+            "Manual connect only".to_string()
         };
         
         let status = gtk::Label::builder()
-            .label(status_text)
+            .label(&status_text)
             .css_classes(["orbit-status"])
             .halign(gtk::Align::Start)
             .build();
-        info_box.append(&status);
+        if network.autoconnect && !network.is_active {
+            status.add_css_class("orbit-status-accent");
+        }
+        status_row.append(&status);
         
+        info_box.append(&status_row);
         row.append(&info_box);
-        
-        let autoconnect_box = gtk::Box::builder()
-            .orientation(Orientation::Horizontal)
-            .spacing(4)
-            .valign(gtk::Align::Center)
-            .build();
-        
-        let auto_label = gtk::Label::builder()
-            .label("Auto")
-            .css_classes(["orbit-status"])
-            .build();
         
         let autoconnect_switch = gtk::Switch::builder()
             .active(network.autoconnect)
             .css_classes(["orbit-toggle-switch"])
+            .halign(gtk::Align::Center)
+            .valign(gtk::Align::Center)
+            .tooltip_text("Toggle automatic connection for this network")
             .build();
         
-        autoconnect_box.append(&auto_label);
-        autoconnect_box.append(&autoconnect_switch);
-        row.append(&autoconnect_box);
+        row.append(&autoconnect_switch);
         
         // Forget Button
         let forget_btn = gtk::Button::builder()
             .label("Forget")
             .css_classes(["orbit-button", "destructive", "flat"])
             .valign(gtk::Align::Center)
+            .margin_start(4)
             .build();
         row.append(&forget_btn);
         

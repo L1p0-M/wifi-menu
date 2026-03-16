@@ -23,6 +23,7 @@ pub struct SavedNetwork {
 pub struct NetworkDetails {
     pub ssid: String,
     pub ip4_address: String,
+    pub ip6_address: String,
     pub gateway: String,
     pub dns_servers: Vec<String>,
     pub mac_address: String,
@@ -42,6 +43,15 @@ pub enum SecurityType {
 #[derive(Clone)]
 pub struct NetworkManager {
     conn: Connection,
+}
+
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+pub struct VpnProfile {
+    pub name: String,
+    pub vpn_type: String,
+    pub path: String,
+    pub is_active: bool,
+    pub is_external: bool,
 }
 
 impl NetworkManager {
@@ -317,6 +327,29 @@ impl NetworkManager {
                 Err(_) => continue,
             };
             
+            // Check connection type
+            let type_reply = self.conn
+                .call_method(
+                    Some("org.freedesktop.NetworkManager"),
+                    &path_obj,
+                    Some("org.freedesktop.DBus.Properties"),
+                    "Get",
+                    &("org.freedesktop.NetworkManager.Connection.Active", "Type"),
+                )
+                .await;
+
+            if let Ok(reply) = type_reply {
+                if let Ok(type_val) = reply.body().deserialize::<zbus::zvariant::OwnedValue>() {
+                    let val: zbus::zvariant::Value = type_val.into();
+                    if let Ok(conn_type) = String::try_from(val) {
+                        // Only allow WiFi or Ethernet
+                        if conn_type != "802-11-wireless" && conn_type != "802-3-ethernet" {
+                            continue;
+                        }
+                    }
+                }
+            }
+
             let id_reply = self.conn
                 .call_method(
                     Some("org.freedesktop.NetworkManager"),
@@ -331,6 +364,15 @@ impl NetworkManager {
                 if let Ok(id_val) = reply.body().deserialize::<zbus::zvariant::OwnedValue>() {
                     let val: zbus::zvariant::Value = id_val.into();
                     if let Ok(id) = String::try_from(val) {
+                        // Additional blacklist for common virtual interface names
+                        let lower_id = id.to_lowercase();
+                        if lower_id.starts_with("docker") || 
+                           lower_id.starts_with("br-") || 
+                           lower_id.starts_with("veth") || 
+                           lower_id.starts_with("lo") || 
+                           lower_id.starts_with("virbr") {
+                            continue;
+                        }
                         return Some(id);
                     }
                 }
@@ -664,16 +706,255 @@ impl NetworkManager {
                 &("org.freedesktop.NetworkManager", "ActiveConnections"),
             )
             .await;
-        if let Ok(r) = reply {
-            if let Ok(val) = r.body().deserialize::<zbus::zvariant::OwnedValue>() {
-                if let Ok(paths) = <Vec<zbus::zvariant::OwnedObjectPath>>::try_from(val) {
+
+        if let Ok(reply) = reply {
+            if let Ok(val) = reply.body().deserialize::<zbus::zvariant::OwnedValue>() {
+                let v: zbus::zvariant::Value = val.into();
+                if let Ok(paths) = Vec::<zbus::zvariant::OwnedObjectPath>::try_from(v) {
                     return paths.into_iter().map(|p| p.to_string()).collect();
                 }
             }
         }
         Vec::new()
     }
-    
+
+    pub async fn get_vpn_profiles(&self) -> zbus::Result<Vec<VpnProfile>> {
+        let reply: Vec<zbus::zvariant::OwnedObjectPath> = self.conn
+            .call_method(
+                Some("org.freedesktop.NetworkManager"),
+                "/org/freedesktop/NetworkManager/Settings",
+                Some("org.freedesktop.NetworkManager.Settings"),
+                "ListConnections",
+                &(),
+            )
+            .await?
+            .body()
+            .deserialize()?;
+
+        let active_paths = self.get_active_connection_paths().await;
+        let mut profiles = Vec::new();
+
+        for path in reply {
+            let conn_props = match self.get_connection_settings_raw(&path).await {
+                Ok(p) => p,
+                Err(_) => continue,
+            };
+
+            if let Some(conn) = conn_props.get("connection") {
+                if let Some(v) = conn.get("type") {
+                    let val = zbus::zvariant::Value::try_from(v).unwrap();
+                    if let Ok(conn_type) = <&str>::try_from(&val) {
+                        let is_vpn = conn_type == "vpn" || 
+                                    conn_type == "wireguard" || 
+                                    conn_type == "tun" || 
+                                    conn_type == "ppp";
+                        
+                        if is_vpn {
+                            let name = conn.get("id")
+                                .and_then(|v| {
+                                    let val = zbus::zvariant::Value::try_from(v).ok()?;
+                                    match val {
+                                        zbus::zvariant::Value::Str(s) => Some(s.to_string()),
+                                        _ => None,
+                                    }
+                                })
+                                .unwrap_or_else(|| "Unknown VPN".to_string());
+
+                            let mut is_active = false;
+                            for active_path in &active_paths {
+                                let path_obj = match zbus::zvariant::ObjectPath::try_from(active_path.as_str()) {
+                                    Ok(p) => p,
+                                    Err(_) => continue,
+                                };
+                                
+                                let connection_path_reply: zbus::zvariant::OwnedValue = self.conn
+                                    .call_method(
+                                        Some("org.freedesktop.NetworkManager"),
+                                        &path_obj,
+                                        Some("org.freedesktop.DBus.Properties"),
+                                        "Get",
+                                        &("org.freedesktop.NetworkManager.Connection.Active", "Connection"),
+                                    )
+                                    .await?
+                                    .body()
+                                    .deserialize()?;
+                                
+                                let val: zbus::zvariant::Value = connection_path_reply.into();
+                                let active_conn_path = zbus::zvariant::OwnedObjectPath::try_from(val).unwrap();
+                                if active_conn_path.as_str() == path.as_str() {
+                                    is_active = true;
+                                    break;
+                                }
+                            }
+
+                            profiles.push(VpnProfile {
+                                name,
+                                vpn_type: conn_type.to_string(),
+                                path: path.to_string(),
+                                is_active,
+                                is_external: false,
+                            });
+                        }
+                    }
+                }
+            }
+        }
+
+        // Detect External VPNs (Riseup, Tailscale, Mullvad)
+        
+        // Riseup VPN
+        if std::path::Path::new("/usr/bin/riseup-vpn").exists() || std::path::Path::new("/usr/local/bin/riseup-vpn").exists() {
+            // For Riseup, being "active" should mean the tunnel is up, not just the app is open
+            let is_tunnel_up = std::process::Command::new("ip")
+                .args(["addr", "show", "tun0"])
+                .output()
+                .map(|o| o.status.success())
+                .unwrap_or(false);
+
+            profiles.push(VpnProfile {
+                name: "Riseup VPN".to_string(),
+                vpn_type: if is_tunnel_up { "Secure Tunnel" } else { "App Open / Connecting" }.to_string(),
+                path: "external:riseup".to_string(),
+                is_active: is_tunnel_up,
+                is_external: true,
+            });
+        }
+
+        // Tailscale
+        if std::path::Path::new("/usr/bin/tailscale").exists() || std::path::Path::new("/usr/local/bin/tailscale").exists() {
+            let status = std::process::Command::new("tailscale")
+                .arg("status")
+                .output();
+            
+            let is_active = match status {
+                Ok(o) => {
+                    let s = String::from_utf8_lossy(&o.stdout);
+                    !s.contains("Tailscale is stopped") && o.status.success()
+                },
+                Err(_) => false,
+            };
+
+            profiles.push(VpnProfile {
+                name: "Tailscale".to_string(),
+                vpn_type: "Mesh VPN".to_string(),
+                path: "external:tailscale".to_string(),
+                is_active,
+                is_external: true,
+            });
+        }
+
+        // Mullvad
+        if std::path::Path::new("/usr/bin/mullvad").exists() || std::path::Path::new("/usr/local/bin/mullvad").exists() {
+            let status = std::process::Command::new("mullvad")
+                .arg("status")
+                .output();
+            
+            let is_active = match status {
+                Ok(o) => {
+                    let s = String::from_utf8_lossy(&o.stdout);
+                    s.to_lowercase().contains("connected")
+                },
+                Err(_) => false,
+            };
+
+            profiles.push(VpnProfile {
+                name: "Mullvad VPN".to_string(),
+                vpn_type: "WireGuard/OpenVPN".to_string(),
+                path: "external:mullvad".to_string(),
+                is_active,
+                is_external: true,
+            });
+        }
+
+        Ok(profiles)
+    }
+
+    pub async fn activate_vpn(&self, path: &str) -> zbus::Result<()> {
+        if path.starts_with("external:") {
+            let service = &path[9..];
+            match service {
+                "riseup" => {
+                    let _ = std::process::Command::new("riseup-vpn").arg("--start-vpn").arg("on").spawn();
+                }
+                "tailscale" => {
+                    let _ = std::process::Command::new("tailscale").arg("up").status();
+                }
+                "mullvad" => {
+                    let _ = std::process::Command::new("mullvad").arg("connect").status();
+                }
+                _ => {}
+            }
+            return Ok(());
+        }
+
+        let path_obj = zbus::zvariant::ObjectPath::try_from(path)
+            .map_err(|e| zbus::Error::Variant(e))?;
+        
+        self.conn
+            .call_method(
+                Some("org.freedesktop.NetworkManager"),
+                "/org/freedesktop/NetworkManager",
+                Some("org.freedesktop.NetworkManager"),
+                "ActivateConnection",
+                &(&path_obj, "/", "/"),
+            )
+            .await?;
+        Ok(())
+    }
+
+    pub async fn deactivate_vpn(&self, path: &str) -> zbus::Result<()> {
+        if path.starts_with("external:") {
+            let service = &path[9..];
+            match service {
+                "riseup" => {
+                    let _ = std::process::Command::new("riseup-vpn").arg("--start-vpn").arg("off").spawn();
+                }
+                "tailscale" => {
+                    let _ = std::process::Command::new("tailscale").arg("down").status();
+                }
+                "mullvad" => {
+                    let _ = std::process::Command::new("mullvad").arg("disconnect").status();
+                }
+                _ => {}
+            }
+            return Ok(());
+        }
+
+        let active_paths = self.get_active_connection_paths().await;
+        for active_path in active_paths {
+            let path_obj = zbus::zvariant::ObjectPath::try_from(active_path.as_str())
+                .map_err(|e| zbus::Error::Variant(e))?;
+            
+            let connection_path_reply: zbus::zvariant::OwnedValue = self.conn
+                .call_method(
+                    Some("org.freedesktop.NetworkManager"),
+                    &path_obj,
+                    Some("org.freedesktop.DBus.Properties"),
+                    "Get",
+                    &("org.freedesktop.NetworkManager.Connection.Active", "Connection"),
+                )
+                .await?
+                .body()
+                .deserialize()?;
+            
+            let val: zbus::zvariant::Value = connection_path_reply.into();
+            let active_conn_path = zbus::zvariant::OwnedObjectPath::try_from(val).unwrap();
+            if active_conn_path.as_str() == path {
+                self.conn
+                    .call_method(
+                        Some("org.freedesktop.NetworkManager"),
+                        "/org/freedesktop/NetworkManager",
+                        Some("org.freedesktop.NetworkManager"),
+                        "DeactivateConnection",
+                        &(&path_obj),
+                    )
+                    .await?;
+                return Ok(());
+            }
+        }
+        Ok(())
+    }
+
     pub async fn set_autoconnect(&self, path: &str, autoconnect: bool) -> zbus::Result<()> {
         let path_obj: zbus::zvariant::ObjectPath = path.try_into()
             .map_err(|e: zbus::zvariant::Error| zbus::Error::Variant(e))?;
@@ -808,6 +1089,76 @@ impl NetworkManager {
                         }
                     }
                 }
+
+                let ip6_val_reply: zbus::zvariant::OwnedValue = self.conn
+                    .call_method(
+                        Some("org.freedesktop.NetworkManager"),
+                        &path,
+                        Some("org.freedesktop.DBus.Properties"),
+                        "Get",
+                        &("org.freedesktop.NetworkManager.Connection.Active", "Ip6Config"),
+                    )
+                    .await?
+                    .body()
+                    .deserialize()?;
+                
+                let ip6_path = zbus::zvariant::OwnedObjectPath::try_from(ip6_val_reply).unwrap_or_else(|_| "/".try_into().unwrap());
+                
+                if ip6_path.as_str() != "/" {
+                    let addr_reply_val: zbus::zvariant::OwnedValue = self.conn
+                        .call_method(
+                            Some("org.freedesktop.NetworkManager"),
+                            &ip6_path,
+                            Some("org.freedesktop.DBus.Properties"),
+                            "Get",
+                            &("org.freedesktop.NetworkManager.IP6Config", "AddressData"),
+                        )
+                        .await?
+                        .body()
+                        .deserialize()?;
+                    
+                    let val: zbus::zvariant::Value = addr_reply_val.into();
+                    if let zbus::zvariant::Value::Array(a) = val {
+                        for iv in a.iter() {
+                            let owned_iv = zbus::zvariant::OwnedValue::try_from(iv).expect("Value should be convertible to OwnedValue");
+                            if let Ok(map) = HashMap::<String, zbus::zvariant::OwnedValue>::try_from(owned_iv) {
+                                if let Some(address_v) = map.get("address") {
+                                    if let Ok(addr_str) = <&str>::try_from(&**address_v) {
+                                        details.ip6_address = addr_str.to_string();
+                                    }
+                                }
+                            }
+                        }
+                    }
+
+                    let dns6_reply_val: zbus::zvariant::OwnedValue = self.conn
+                        .call_method(
+                            Some("org.freedesktop.NetworkManager"),
+                            &ip6_path,
+                            Some("org.freedesktop.DBus.Properties"),
+                            "Get",
+                            &("org.freedesktop.NetworkManager.IP6Config", "Nameservers"),
+                        )
+                        .await?
+                        .body()
+                        .deserialize()?;
+                    
+                    let dns6_val: zbus::zvariant::Value = dns6_reply_val.into();
+                    if let zbus::zvariant::Value::Array(a) = dns6_val {
+                        for iv in a.iter() {
+                            if let zbus::zvariant::Value::Array(ba) = iv {
+                                let bytes: Vec<u8> = ba.iter().filter_map(|bv| u8::try_from(bv).ok()).collect();
+                                if bytes.len() == 16 {
+                                    let mut addr_parts = Vec::new();
+                                    for i in 0..8 {
+                                        addr_parts.push(format!("{:x}{:02x}", bytes[i*2], bytes[i*2+1]));
+                                    }
+                                    details.dns_servers.push(addr_parts.join(":"));
+                                }
+                            }
+                        }
+                    }
+                }
                 
                 let dev_reply_val: zbus::zvariant::OwnedValue = self.conn
                     .call_method(
@@ -837,8 +1188,29 @@ impl NetworkManager {
                                 .await?
                                 .body()
                                 .deserialize()?;
-                            details.mac_address = String::try_from(zbus::zvariant::Value::from(hw_val_reply)).unwrap_or_default();
-                            break;
+                             details.mac_address = String::try_from(zbus::zvariant::Value::from(hw_val_reply)).unwrap_or_default();
+                             
+                             // Get connection speed
+                             let speed_reply: zbus::zvariant::OwnedValue = self.conn
+                                .call_method(
+                                    Some("org.freedesktop.NetworkManager"),
+                                    &device_path,
+                                    Some("org.freedesktop.DBus.Properties"),
+                                    "Get",
+                                    &("org.freedesktop.NetworkManager.Device.Wireless", "Bitrate"),
+                                )
+                                .await?
+                                .body()
+                                .deserialize()?;
+                             
+                             if let Ok(bitrate_val) = u32::try_from(zbus::zvariant::Value::from(speed_reply)) {
+                                 if bitrate_val > 0 {
+                                     details.connection_speed = format!("{} Mb/s", bitrate_val / 1000);
+                                 }
+                             }
+                             
+                             break;
+
                         }
                     }
                 }

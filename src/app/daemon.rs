@@ -10,7 +10,7 @@ const SOCKET_NAME: &str = "orbit.sock";
 pub enum DaemonCommand {
     Show,
     Hide,
-    Toggle(Option<String>),
+    Toggle(Option<String>, Option<String>),
     ReloadTheme,
     ReloadConfig,
     Quit,
@@ -34,7 +34,12 @@ impl DaemonCommand {
             } else {
                 None
             };
-            Some(Self::Toggle(pos))
+            let tab = if parts.len() > 2 && !parts[2].is_empty() {
+                Some(parts[2].to_string())
+            } else {
+                None
+            };
+            Some(Self::Toggle(pos, tab))
         } else if s.starts_with("quit") {
             Some(Self::Quit)
         } else {
@@ -48,12 +53,10 @@ impl DaemonCommand {
             Self::Hide => "hide".to_string(),
             Self::ReloadTheme => "reload-theme".to_string(),
             Self::ReloadConfig => "reload-config".to_string(),
-            Self::Toggle(pos) => {
-                if let Some(p) = pos {
-                    format!("toggle:{}", p)
-                } else {
-                    "toggle".to_string()
-                }
+            Self::Toggle(pos, tab) => {
+                let p = pos.as_deref().unwrap_or("");
+                let t = tab.as_deref().unwrap_or("");
+                format!("toggle:{}:{}", p, t)
             }
             Self::Quit => "quit".to_string(),
         }

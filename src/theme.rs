@@ -460,6 +460,12 @@ entry:focus, password-entry:focus {{
     opacity: 0.6;
 }}
 
+.orbit-status-accent {{
+    color: {accent};
+    opacity: 0.9;
+    font-weight: 600;
+}}
+
 /* Signal/device type icon (disconnected state) */
 .orbit-signal-icon {{
     color: {fg};
@@ -503,6 +509,43 @@ entry:focus, password-entry:focus {{
 
 .orbit-toggle-switch:checked {{
     background-color: {accent};
+}}
+
+.orbit-battery-mini {{
+    font-size: 10px;
+    font-weight: 700;
+    color: {fg};
+    opacity: 0.8;
+}}
+
+.orbit-battery-mini.low {{
+    color: {destructive};
+    opacity: 1.0;
+}}
+
+.orbit-search-container {{
+    background: rgba(255, 255, 255, 0.03);
+    border: 1px solid rgba(255, 255, 255, 0.05);
+    border-radius: 12px;
+    padding: 2px;
+}}
+
+.orbit-search-entry {{
+    background: transparent;
+    border: none;
+    box-shadow: none;
+    color: {fg};
+    font-size: 12px;
+}}
+
+.orbit-search-entry > text {{
+    caret-color: {accent};
+}}
+
+.orbit-saved-list-container {{
+    margin-top: 8px;
+    background: rgba(255, 255, 255, 0.02);
+    border-radius: 12px;
 }}
 "#,
             panel_bg = panel_bg,

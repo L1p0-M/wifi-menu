@@ -21,10 +21,13 @@
 - [x] Smart autoconnect wait logic (Boot Performance)
 
 ## Planned
-- [ ] Tab-specific launch (toggle directly into WiFi or Bluetooth tab via flag)
+- [x] Tab-specific launch (toggle directly into WiFi or Bluetooth tab via flag)
 - [ ] Bluetooth PIN entry dialog (for keyboards)
 - [ ] IPv6 configuration support
 - [ ] Search/filter for networks
 - [ ] Bluetooth device details view
 - [ ] Confirmation dialogs for destructive actions
 - [ ] Batch D-Bus calls (performance)
+- [ ] Enhanced Waybar integration (Dynamic JSON status module)
+- [ ] Monetization & Sustainability (GitHub Sponsors integration, "Support the Project" UI button)
+- [ ] Enterprise/Advanced Features (Network auditing, 802.1X Enterprise support)
