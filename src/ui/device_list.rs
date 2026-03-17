@@ -221,16 +221,6 @@ impl DeviceList {
         row.add_controller(focus_in);
         row.add_controller(focus_out);
 
-        let click_gesture = gtk::GestureClick::new();
-        let path_click = device.path.clone();
-        let on_details_click = self.on_details.clone();
-        click_gesture.connect_pressed(move |_, _, _, _| {
-            if let Some(callback) = on_details_click.borrow().as_ref() {
-                callback(path_click.clone());
-            }
-        });
-        row.add_controller(click_gesture);
-
         let icon_name = match device.device_type {
             Some(DeviceType::Audio) => "audio-headphones-symbolic",
             Some(DeviceType::Keyboard) => "input-keyboard-symbolic",
