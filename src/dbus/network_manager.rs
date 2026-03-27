@@ -25,7 +25,8 @@ pub struct NetworkDetails {
     pub ip4_address: String,
     pub ip6_address: String,
     pub gateway: String,
-    pub dns_servers: Vec<String>,
+    pub ipv4_dns: Vec<String>,
+    pub ipv6_dns: Vec<String>,
     pub mac_address: String,
     pub connection_speed: String,
     pub is_connected: bool,
@@ -1078,7 +1079,7 @@ impl NetworkManager {
                             &ip4_path,
                             Some("org.freedesktop.DBus.Properties"),
                             "Get",
-                            &("org.freedesktop.NetworkManager.IP4Config", "Nameservers"),
+                            &("org.freedesktop.NetworkManager.IP4Config", "NameserverData"),
                         )
                         .await?
                         .body()
@@ -1087,12 +1088,12 @@ impl NetworkManager {
                     let dns_val: zbus::zvariant::Value = dns_reply_val.into();
                     if let zbus::zvariant::Value::Array(a) = dns_val {
                         for iv in a.iter() {
-                            if let zbus::zvariant::Value::Array(ba) = iv {
-                                let bytes: Vec<u8> = ba.iter().filter_map(|bv| {
-                                    u8::try_from(bv).ok()
-                                }).collect();
-                                if bytes.len() == 4 {
-                                    details.dns_servers.push(format!("{}.{}.{}.{}", bytes[0], bytes[1], bytes[2], bytes[3]));
+                            let owned_iv = zbus::zvariant::OwnedValue::try_from(iv).expect("Value should be convertible to OwnedValue");
+                            if let Ok(map) = HashMap::<String, zbus::zvariant::OwnedValue>::try_from(owned_iv) {
+                                if let Some(address_v) = map.get("address") {
+                                    if let Ok(addr_str) = <&str>::try_from(&**address_v) {
+                                        details.ipv4_dns.push(addr_str.to_string());
+                                    }
                                 }
                             }
                         }
@@ -1158,11 +1159,9 @@ impl NetworkManager {
                             if let zbus::zvariant::Value::Array(ba) = iv {
                                 let bytes: Vec<u8> = ba.iter().filter_map(|bv| u8::try_from(bv).ok()).collect();
                                 if bytes.len() == 16 {
-                                    let mut addr_parts = Vec::new();
-                                    for i in 0..8 {
-                                        addr_parts.push(format!("{:x}{:02x}", bytes[i*2], bytes[i*2+1]));
-                                    }
-                                    details.dns_servers.push(addr_parts.join(":"));
+                                    let octets: [u8; 16] = bytes.try_into().unwrap();
+                                    let addr = std::net::Ipv6Addr::from(octets);
+                                    details.ipv6_dns.push(addr.to_string());
                                 }
                             }
                         }

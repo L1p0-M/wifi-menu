@@ -474,7 +474,8 @@ fn setup_events_receiver(
                                     // Get current DNS
                                     if let Some(ssid) = rt_ref.block_on(async { nm_inst.get_active_ssid().await }) {
                                         if let Ok(details) = rt_ref.block_on(async { nm_inst.get_network_details(&ssid).await }) {
-                                            current_dns = details.dns_servers;
+                        current_dns.extend(details.ipv4_dns);
+                        current_dns.extend(details.ipv6_dns);
                                         }
                                     }
                                 }
@@ -570,7 +571,8 @@ fn setup_events_receiver(
                                         // Get current DNS
                                         if let Some(ssid) = rt_ref.block_on(async { nm_inst.get_active_ssid().await }) {
                                             if let Ok(details) = rt_ref.block_on(async { nm_inst.get_network_details(&ssid).await }) {
-                                                current_dns = details.dns_servers;
+                                                current_dns.extend(details.ipv4_dns);
+                                                current_dns.extend(details.ipv6_dns);
                                             }
                                         }
                                     }
@@ -755,7 +757,8 @@ fn setup_ui_callbacks(
                 // Get current DNS servers from active connection
                 if let Some(ssid) = rt.block_on(async { nm_inst.get_active_ssid().await }) {
                     if let Ok(details) = rt.block_on(async { nm_inst.get_network_details(&ssid).await }) {
-                        current_dns = details.dns_servers;
+                        current_dns.extend(details.ipv4_dns);
+                        current_dns.extend(details.ipv6_dns);
                     }
                 }
             }

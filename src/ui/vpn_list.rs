@@ -4,13 +4,44 @@ use std::cell::RefCell;
 use std::rc::Rc;
 use crate::dbus::network_manager::VpnProfile;
 
+struct DnsInfo {
+    provider: String,
+    is_private: bool,
+}
+
+fn identify_dns_provider(dns: &str, ip_prefix: &str) -> DnsInfo {
+    let (provider, is_private) = if dns.starts_with("1.1.1.") || dns.starts_with("1.0.0.") || dns.starts_with("2606:4700:") {
+        ("Cloudflare", true)
+    } else if dns.starts_with("8.8.8.") || dns.starts_with("8.8.4.") || dns.starts_with("2001:4860:") {
+        ("Google", false)
+    } else if dns.starts_with("9.9.9.") || dns.starts_with("149.112.112.") || dns.starts_with("2620:fe:") || dns.starts_with("2620:f3:") {
+        ("Quad9", true)
+    } else if dns.starts_with("208.67.") || dns.starts_with("2620:119:") {
+        ("OpenDNS", false)
+    } else if dns.starts_with("94.140.") || dns.starts_with("2a10:50c0:") {
+        ("AdGuard", true)
+    } else if !ip_prefix.is_empty() && dns.starts_with(ip_prefix) {
+        ("ISP / Router", false)
+    } else {
+        ("Unknown", false)
+    };
+
+    DnsInfo {
+        provider: provider.to_string(),
+        is_private,
+    }
+}
+
 #[derive(Clone)]
 pub struct VpnList {
     container: gtk::Box,
     list_box: gtk::Box,
     public_ip_label: gtk::Label,
     isp_label: gtk::Label,
-    dns_label: gtk::Label,
+    dns_summary_label: gtk::Label,
+    dns_expand_icon: gtk::Image,
+    dns_details_revealer: gtk::Revealer,
+    dns_details_box: gtk::Box,
     profiles: Rc<RefCell<Vec<VpnProfile>>>,
     on_toggle: Rc<RefCell<Option<Rc<dyn Fn(String, bool)>>>>,
 }
@@ -82,8 +113,13 @@ impl VpnList {
         ip_row.append(&ip_info);
         info_grid.append(&ip_row);
 
-        // DNS Row
-        let dns_row = gtk::Box::builder()
+        // DNS Section — clickable summary + expandable details
+        let dns_section = gtk::Box::builder()
+            .orientation(Orientation::Vertical)
+            .spacing(4)
+            .build();
+
+        let dns_header_row = gtk::Box::builder()
             .orientation(Orientation::Horizontal)
             .spacing(12)
             .build();
@@ -96,29 +132,68 @@ impl VpnList {
         
         let dns_info = gtk::Box::builder()
             .orientation(Orientation::Vertical)
+            .hexpand(true)
             .build();
 
         let dns_title = gtk::Label::builder()
-            .label("DNS SERVERS")
+            .label("DNS")
             .css_classes(["orbit-section-header"])
             .halign(gtk::Align::Start)
             .build();
 
-        let dns_label = gtk::Label::builder()
-            .label("Detecting DNS...")
+        let dns_summary_label = gtk::Label::builder()
+            .label("Detecting...")
             .css_classes(["orbit-status"])
             .halign(gtk::Align::Start)
-            .wrap(true)
-            .xalign(0.0)
-            .selectable(true)
             .build();
 
         dns_info.append(&dns_title);
-        dns_info.append(&dns_label);
-        
-        dns_row.append(&dns_icon);
-        dns_row.append(&dns_info);
-        info_grid.append(&dns_row);
+        dns_info.append(&dns_summary_label);
+
+        let dns_expand_icon = gtk::Image::builder()
+            .icon_name("pan-end-symbolic")
+            .pixel_size(14)
+            .css_classes(["orbit-dns-expand-icon"])
+            .valign(gtk::Align::Center)
+            .build();
+
+        dns_header_row.append(&dns_icon);
+        dns_header_row.append(&dns_info);
+        dns_header_row.append(&dns_expand_icon);
+
+        // Make the DNS header row clickable
+        let dns_details_box = gtk::Box::builder()
+            .orientation(Orientation::Vertical)
+            .spacing(4)
+            .margin_start(36)
+            .margin_top(4)
+            .build();
+
+        let dns_details_revealer = gtk::Revealer::builder()
+            .child(&dns_details_box)
+            .reveal_child(false)
+            .transition_type(gtk::RevealerTransitionType::SlideDown)
+            .transition_duration(200)
+            .build();
+
+        let click_gesture = gtk::GestureClick::new();
+        let revealer_clone = dns_details_revealer.clone();
+        let expand_icon_clone = dns_expand_icon.clone();
+        click_gesture.connect_released(move |_, _, _, _| {
+            let expanded = revealer_clone.reveals_child();
+            revealer_clone.set_reveal_child(!expanded);
+            if expanded {
+                expand_icon_clone.set_icon_name(Some("pan-end-symbolic"));
+            } else {
+                expand_icon_clone.set_icon_name(Some("pan-down-symbolic"));
+            }
+        });
+        dns_header_row.add_controller(click_gesture);
+        dns_header_row.set_cursor_from_name(Some("pointer"));
+
+        dns_section.append(&dns_header_row);
+        dns_section.append(&dns_details_revealer);
+        info_grid.append(&dns_section);
         
         dashboard.append(&info_grid);
         container.append(&dashboard);
@@ -144,7 +219,10 @@ impl VpnList {
             list_box,
             public_ip_label,
             isp_label,
-            dns_label,
+            dns_summary_label,
+            dns_expand_icon,
+            dns_details_revealer,
+            dns_details_box,
             profiles: Rc::new(RefCell::new(Vec::new())),
             on_toggle: Rc::new(RefCell::new(None)),
         };
@@ -164,23 +242,84 @@ impl VpnList {
             ip.split('.').take(3).collect::<Vec<_>>().join(".")
         };
 
-        let mut dns_display = Vec::new();
+        // Classify each server
+        let mut classified: Vec<(String, DnsInfo)> = Vec::new();
         for dns in dns_servers {
-            let provider = match dns.as_str() {
-                "1.1.1.1" | "1.0.0.1" | "2606:4700:4700::1111" => "Cloudflare (Secure)",
-                "8.8.8.8" | "8.8.4.4" | "2001:4860:4860::8888" => "Google",
-                "9.9.9.9" | "149.112.112.112" | "2620:fe::fe" => "Quad9 (Secure)",
-                d if d.contains(&ip_prefix) => "Local Router / ISP",
-                _ => "External DNS",
-            };
-            dns_display.push(format!("{}\n{}", provider, dns));
+            let info = identify_dns_provider(dns, &ip_prefix);
+            classified.push((dns.clone(), info));
         }
 
-        if dns_display.is_empty() {
-            self.dns_label.set_label("Default (System)");
-        } else {
-            self.dns_label.set_label(&dns_display.join("\n\n"));
+        // Build summary: deduplicate by provider name, preserving order
+        let mut seen_providers: Vec<String> = Vec::new();
+        let mut any_private = false;
+        for (_, info) in &classified {
+            if !seen_providers.contains(&info.provider) {
+                seen_providers.push(info.provider.clone());
+            }
+            if info.is_private {
+                any_private = true;
+            }
         }
+
+        let summary = if seen_providers.is_empty() {
+            "System Default".to_string()
+        } else if seen_providers.len() == 1 {
+            let name = &seen_providers[0];
+            if any_private {
+                format!("{} (Private)", name)
+            } else {
+                name.clone()
+            }
+        } else {
+            let names = seen_providers.join(" + ");
+            format!("Mixed ({})", names)
+        };
+
+        self.dns_summary_label.set_label(&summary);
+
+        if any_private {
+            self.dns_summary_label.add_css_class("orbit-status-accent");
+        } else {
+            self.dns_summary_label.remove_css_class("orbit-status-accent");
+        }
+
+        // Populate expandable details
+        while let Some(child) = self.dns_details_box.first_child() {
+            self.dns_details_box.remove(&child);
+        }
+
+        for (dns_addr, info) in &classified {
+            let row = gtk::Box::builder()
+                .orientation(Orientation::Horizontal)
+                .spacing(8)
+                .build();
+
+            let addr_label = gtk::Label::builder()
+                .label(dns_addr)
+                .css_classes(["orbit-dns-detail"])
+                .halign(gtk::Align::Start)
+                .hexpand(true)
+                .selectable(true)
+                .build();
+
+            let provider_label = gtk::Label::builder()
+                .label(&info.provider)
+                .css_classes(if info.is_private {
+                    vec!["orbit-dns-detail", "orbit-status-accent"]
+                } else {
+                    vec!["orbit-dns-detail"]
+                })
+                .halign(gtk::Align::End)
+                .build();
+
+            row.append(&addr_label);
+            row.append(&provider_label);
+            self.dns_details_box.append(&row);
+        }
+
+        // Reset expand state when data refreshes
+        self.dns_details_revealer.set_reveal_child(false);
+        self.dns_expand_icon.set_icon_name(Some("pan-end-symbolic"));
 
         if is_secure {
             self.isp_label.add_css_class("orbit-status-accent");
@@ -236,7 +375,7 @@ impl VpnList {
             .build();
         
         let icon_name = if profile.path == "external:riseup" {
-            "network-vpn-symbolic" // Could use a custom riseup icon if available
+            "network-vpn-symbolic"
         } else if profile.path == "external:tailscale" {
             "network-wireless-encrypted-symbolic"
         } else {

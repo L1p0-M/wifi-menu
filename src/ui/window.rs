@@ -860,11 +860,12 @@ impl OrbitWindow {
             self.details_content.remove(&child);
         }
         
-        let dns_text = if details.dns_servers.is_empty() { 
-            "N/A".to_string() 
-        } else { 
-            details.dns_servers.join(", ") 
-        };
+        let ip4_dns_text = details.ipv4_dns.first()
+            .cloned()
+            .unwrap_or_else(|| "N/A".to_string());
+        let ip6_dns_text = details.ipv6_dns.first()
+            .cloned()
+            .unwrap_or_else(|| "N/A".to_string());
         
         let ip_text = if details.ip4_address.is_empty() { "N/A" } else { details.ip4_address.as_str() };
         let ip6_text = if details.ip6_address.is_empty() { "N/A" } else { details.ip6_address.as_str() };
@@ -872,12 +873,13 @@ impl OrbitWindow {
         let mac_text = if details.mac_address.is_empty() { "N/A" } else { details.mac_address.as_str() };
         let speed_text = if details.connection_speed.is_empty() { "N/A" } else { details.connection_speed.as_str() };
         
-        let rows: [(&str, &str, &str); 7] = [
+        let rows: [(&str, &str, &str); 8] = [
             ("SSID", details.ssid.as_str(), "network-wireless-symbolic"),
             ("IPv4 Address", ip_text, "network-server-symbolic"),
             ("IPv6 Address", ip6_text, "network-server-symbolic"),
-            ("Gateway", gateway_text, "network-server-symbolic"),
-            ("DNS", dns_text.as_str(), "web-browser-symbolic"),
+            ("Gateway", gateway_text, "network-vpn-symbolic"),
+            ("IPv4 DNS", ip4_dns_text.as_str(), "system-run-symbolic"),
+            ("IPv6 DNS", ip6_dns_text.as_str(), "system-run-symbolic"),
             ("MAC Address", mac_text, "dialog-password-symbolic"),
             ("Speed", speed_text, "network-transmit-receive-symbolic"),
         ];
@@ -907,6 +909,8 @@ impl OrbitWindow {
                 .css_classes(["orbit-detail-value"])
                 .halign(gtk::Align::End)
                 .build();
+            value_widget.set_ellipsize(gtk::pango::EllipsizeMode::End);
+            value_widget.set_wrap(true);
             
             row.append(&icon);
             row.append(&label_widget);

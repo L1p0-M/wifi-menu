@@ -547,6 +547,19 @@ entry:focus, password-entry:focus {{
     background: rgba(255, 255, 255, 0.02);
     border-radius: 12px;
 }}
+
+.orbit-dns-detail {{
+    font-size: 10px;
+    color: {fg};
+    opacity: 0.5;
+    font-family: monospace;
+}}
+
+.orbit-dns-expand-icon {{
+    color: {fg};
+    opacity: 0.4;
+    transition: opacity 0.2s ease;
+}}
 "#,
             panel_bg = panel_bg,
             section_bg = section_bg,
