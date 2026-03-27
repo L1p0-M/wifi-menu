@@ -140,3 +140,7 @@ MIT License - see [LICENSE](LICENSE) for details.
 ## Credits
 
 Developed by [LifeOfATitan](https://github.com/LifeOfATitan).
+
+Contributions:
+
+Added Animations and show/hide based on @themkoi suggestions
