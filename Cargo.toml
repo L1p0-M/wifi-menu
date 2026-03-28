@@ -1,6 +1,6 @@
 [package]
 name = "orbit"
-version = "2.4.0"
+version = "2.4.1"
 edition = "2021"
 description = "A WiFi/Bluetooth manager for Wayland"
 authors = ["Amadeus"]
